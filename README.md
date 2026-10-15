@@ -74,7 +74,7 @@ ai_factory/
 
 ---
 
-## Installation
+## Installation and Deployment
 
 ### Prerequisites
 - Node.js 18 or higher
@@ -92,10 +92,32 @@ ai_factory/
    npm install
    ```
 
-3. Deploy rules and skills globally to Antigravity directories:
-   ```bash
-   node deploy_skill.mjs
-   ```
+### Deploying Globally to Antigravity
+
+AI Factory provides `deploy_skill.mjs` to automatically wire the plugin, rules, hooks, and built-in skills across Antigravity runtime environments.
+
+#### 1. Standard Plugin Deployment
+Installs the global plugin, event hooks, and orchestrator rules:
+```bash
+node deploy_skill.mjs
+```
+Target directory:
+- `~/.gemini/config/plugins/ai-factory/`
+  - `plugin.json` and `hooks.json` (configured with dynamic absolute Node and hook paths)
+  - `hooks/hook_handler.js` (intercepts heavy context calls and delegates to router)
+  - `rules/AGENTS.md` and `rules/GEMINI.md` (active system rules for Antigravity)
+
+#### 2. Builtin Skill Deployment (CLI and IDE Native Discovery)
+To allow Antigravity CLI and Antigravity IDE to discover and index `ai_factory` directly in their native built-in skill catalogs, run with the `--builtin` flag:
+```bash
+node deploy_skill.mjs --builtin
+```
+This distributes the skill specification (`SKILL.md`) to all existing host catalogs:
+- `~/.gemini/antigravity-cli/builtin/skills/ai_factory/SKILL.md` (Antigravity CLI)
+- `~/.gemini/antigravity/builtin/skills/ai_factory/SKILL.md` (Antigravity Core)
+- `~/.gemini/antigravity-ide/builtin/skills/ai_factory/SKILL.md` (Antigravity IDE)
+
+When executed, existing files are automatically backed up with a timestamp suffix before being updated.
 
 ---
 
@@ -119,6 +141,11 @@ node router.mjs --engine muse --task "Implement missing unit tests for the route
 ### OpenAI Codex Engine
 ```bash
 node router.mjs --engine codex --model gpt-6.1-sol --task "Produce architectural refactoring roadmap"
+```
+
+### Resuming Previous Session
+```bash
+node router.mjs --resume "session-name" --task "Continue refactoring"
 ```
 
 ### Live Quota Status Check
