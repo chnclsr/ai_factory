@@ -1,0 +1,29 @@
+{
+  "ai-factory-orchestrator": {
+    "enabled": true,
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "node ./hooks/hook_handler.js"
+      }
+    ],
+    "PreInvocation": [
+      {
+        "type": "command",
+        "command": "node ./hooks/hook_handler.js"
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "read_url_content|read_browser_page|browser_navigate",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ./hooks/hook_handler.js"
+          }
+        ]
+      }
+    ]
+  }
+}
+

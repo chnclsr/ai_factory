@@ -1,0 +1,16 @@
+node_modules/
+.env
+.env.*
+!.env.example
+puter_token.txt
+*_registry.json
+*_registry.json.tmp.*
+.*_prompt_*.txt
+*.log
+.runtime/
+.backups/
+coverage/
+*.tmp
+*.bak
+
+# Temporary files and editor leftovers

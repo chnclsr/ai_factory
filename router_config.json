@@ -1,0 +1,144 @@
+{
+  "version": "1.1.0",
+  "policy": "token_saver_offload",
+  "description": "Antigravity minimal token harcar, agir isleri Puter ve Codex'e delege eder.",
+  "engines": {
+    "puter": {
+      "type": "dsh",
+      "base_url": "http://localhost:8080",
+      "cost_usd": 0.0,
+      "models": {
+        "flash": {
+          "id": "deepseek-flash",
+          "remote_model": "openrouter:deepseek/deepseek-v4.1-flash",
+          "cost_input_per_m": 0.0,
+          "cost_output_per_m": 0.0,
+          "role": "routine_fast",
+          "description": "Dosya tarama, hizli analiz, basit kodlama, dokuman ozeti"
+        },
+        "pro": {
+          "id": "deepseek-pro",
+          "remote_model": "openrouter:deepseek/deepseek-v4-pro",
+          "cost_input_per_m": 0.0,
+          "cost_output_per_m": 0.0,
+          "role": "deep_reasoning",
+          "description": "Kompleks mimari, algoritma optimizasyonu, agir kodlama"
+        },
+        "r1": {
+          "id": "deepseek-r1",
+          "remote_model": "openrouter:deepseek/deepseek-r1",
+          "cost_input_per_m": 0.0,
+          "cost_output_per_m": 0.0,
+          "role": "math_logic",
+          "description": "Ileri matematik, ispat ve saf mantik problemleri"
+        }
+      }
+    },
+    "codex": {
+      "type": "codex_cli",
+      "models": {
+        "gpt-6-luna": {
+          "id": "gpt-6-luna",
+          "cost_input_per_m": 0.10,
+          "cost_output_per_m": 0.50,
+          "role": "ultra_fast_lightweight",
+          "description": "En ucuz yeni nesil GPT-6 serisi model"
+        },
+        "gpt-5.6-luna": {
+          "id": "gpt-5.6-luna",
+          "cost_input_per_m": 0.20,
+          "cost_output_per_m": 1.20,
+          "role": "fast_lightweight",
+          "description": "Hafif ve ekonomik GPT-5.6 modeli"
+        },
+        "gpt-6.1-sol": {
+          "id": "gpt-6.1-sol",
+          "cost_input_per_m": 2.00,
+          "cost_output_per_m": 10.00,
+          "role": "flagship_primary",
+          "description": "Varsayilan amiral gemisi genel kodlama ve mantik modeli"
+        },
+        "gpt-6-sol": {
+          "id": "gpt-6-sol",
+          "cost_input_per_m": 2.00,
+          "cost_output_per_m": 10.00,
+          "role": "flagship_base",
+          "description": "Standart GPT-6 serisi amiral gemisi"
+        },
+        "gpt-5.6-terra": {
+          "id": "gpt-5.6-terra",
+          "cost_input_per_m": 2.00,
+          "cost_output_per_m": 12.00,
+          "role": "balanced_workhorse",
+          "description": "Orta segment guclu GPT-5.6 modeli"
+        },
+        "gpt-5.6-sol": {
+          "id": "gpt-5.6-sol",
+          "cost_input_per_m": 4.00,
+          "cost_output_per_m": 20.00,
+          "role": "high_capability",
+          "description": "Yuksek kapasiteli GPT-5.6 modeli"
+        },
+        "gpt-5.5": {
+          "id": "gpt-5.5",
+          "cost_input_per_m": 5.00,
+          "cost_output_per_m": 30.00,
+          "role": "legacy_heavy",
+          "description": "Onceki nesil agir muhakeme modeli"
+        },
+        "gpt-6-astra": {
+          "id": "gpt-6-astra",
+          "cost_input_per_m": 10.00,
+          "cost_output_per_m": 50.00,
+          "role": "frontier_reasoning",
+          "description": "En ust duzey (frontier) akil yurutme ve uzman model"
+        }
+      }
+    },
+    "muse": {
+      "type": "muse_cli",
+      "cost_usd": 0.0,
+      "models": {
+        "muse-spark-1.3-contributor": {
+          "id": "muse-spark-1.3-contributor",
+          "base_model": "muse-spark-1.3-contributor",
+          "contributor_mode": true,
+          "reasoning_effort": "high",
+          "cost_input_per_m": 0.0,
+          "cost_output_per_m": 0.0,
+          "role": "free_meta_coding_agent",
+          "description": "Meta Muse Spark 1.3 Contributor (0$ ucretsiz kodlama ajani)"
+        }
+      }
+    }
+  },
+  "watchdog": {
+    "initial_timeout_ms": 30000,
+    "idle_timeout_ms": 120000,
+    "heavy_idle_timeout_ms": 240000,
+    "check_interval_ms": 5000,
+    "description": "Kademeli bekçi: İlk 30s hiç çıktı yoksa hızlı müdahale, çıktı sonrası 120s-240s sessizlik zaman aşımı."
+  },
+  "circuit_breaker": {
+    "quarantine_base_ms": 45000,
+    "quarantine_max_ms": 600000,
+    "recovery_success_target": 2,
+    "sticky_dwell_turns": 2,
+    "description": "WrongStack tarzı karantina ve half-open probe mekanizması."
+  },
+  "routing_rules": {
+    "prefer_free_puter": true,
+    "complexity_keywords_pro": [
+      "optimizasyon", "mimari", "algoritma", "refactor", "benchmark", "derin", "matematik", "tasarim", "kompleks"
+    ],
+    "muse_keywords": [
+      "muse", "spark", "meta", "contributor"
+    ],
+    "codex_keywords": [
+      "codex", "gpt", "openai", "sandbox", "sol", "luna", "astra", "terra"
+    ],
+    "gemini_keywords": [
+      "gemini", "antigravity", "sen devam et", "sen yap", "kendin yap", "sen bak", "sen cevapla", "sen orkestre et", "devam et"
+    ]
+  }
+}
