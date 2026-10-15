@@ -1,0 +1,43 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "AI Factory yönlendirme akışı",
+    "quality_profile": "showcase",
+    "animation": "none",
+    "views": [
+      { "id": "secim", "label": "Motor seçimi", "focus": ["task", "select", "allowlist"], "note": "Görev ya açık motorla ya da kurallarla yönlendirilir." },
+      { "id": "calistirma", "label": "Çalıştırma ve sonuç", "focus": ["gate", "execute", "report"], "note": "Sağlık kapısı ve CLI çıktısı gerçek sonucu belirler." },
+      { "id": "devretme", "label": "Başarısızlık ve devir", "focus": ["execute", "fallback", "report"], "note": "Yedek zinciri motora göre değişir; Gemini devri raporda görünür." }
+    ]
+  },
+  "lanes": [
+    { "id": "main", "label": "Seçim, çalıştırma ve rapor" },
+    { "id": "branch", "label": "Oturum ve yedek", "variant": "exception" }
+  ],
+  "mainPath": ["task", "select", "allowlist", "gate", "execute", "report"],
+  "nodes": [
+    { "id": "task", "lane": "main", "col": 0, "type": "frontend", "label": "Görev", "sublabel": "--task / --resume" },
+    { "id": "select", "lane": "main", "col": 1, "type": "backend", "label": "Motor seç", "sublabel": "İstek / kural" },
+    { "id": "allowlist", "lane": "main", "col": 2, "type": "security", "label": "Modeli doğrula", "sublabel": "İzin listesi" },
+    { "id": "gate", "lane": "main", "col": 3, "type": "security", "label": "Sağlık kapısı", "sublabel": "Kota / karantina" },
+    { "id": "execute", "lane": "main", "col": 4, "type": "backend", "label": "CLI çalıştır", "sublabel": "Yanıt + session ID" },
+    { "id": "report", "lane": "main", "col": 5, "type": "frontend", "label": "Çalışma raporu", "sublabel": "path + succeed_with" },
+    { "id": "fallback", "lane": "branch", "col": 3, "type": "messagebus", "label": "Yedek / Gemini", "sublabel": "Motora göre zincir" }
+  ],
+  "edges": [
+    { "from": "task", "to": "select", "variant": "emphasis" },
+    { "from": "select", "to": "allowlist", "variant": "security" },
+    { "from": "allowlist", "to": "gate", "variant": "security" },
+    { "from": "gate", "to": "execute", "label": "izinli", "variant": "emphasis" },
+    { "from": "execute", "to": "report", "label": "yanıt var", "variant": "emphasis" },
+    { "from": "gate", "to": "fallback", "label": "karantina", "variant": "security", "role": "error" },
+    { "from": "execute", "to": "fallback", "label": "uygun hata", "variant": "security", "role": "error" },
+    { "from": "fallback", "to": "report", "label": "son durum", "variant": "dashed" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Başlangıç", "items": ["Varsayılan rota Puter Flash", "--resume kayıtlı oturumu kullanır"] },
+    { "dot": "rose", "title": "Sınırlar", "items": ["OpenCode ücretsiz; Claude izin listeli", "--no-fallback seçilen motorda durur"] },
+    { "dot": "emerald", "title": "Rapor", "items": ["path yalnızca o çağrının motorlarını gösterir", "Gemini devri işi üst ajana bırakır"] }
+  ]
+}

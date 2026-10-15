@@ -2,40 +2,39 @@
 
 > **Smart Token Offloading and Multi-Engine Orchestrator for Antigravity**
 
-AI Factory is an automated routing and token offloading orchestrator designed for Antigravity and Gemini environments. It preserves context window capacity and model quotas by delegating heavy codebase inspection, repository analysis, large document processing, and deep algorithmic reasoning to zero-cost ($0) backend engines.
+AI Factory routes coding and repository work from Antigravity/Gemini to local AI CLIs. You can let it choose a starting engine or name OpenCode, Claude, Muse, Puter, or Codex yourself. It records what actually ran and can continue a saved CLI session.
+
+| Before | After |
+|---|---|
+| Pick a CLI and model by hand for every task. | Send one task to the router; it selects an engine or uses the one you named. |
+| Lose track of which engine ran or whether a fallback happened. | Read one execution report with the actual `path` and `succeed_with`. |
+| Start over on a follow-up. | Save a named session and resume it when that CLI returns a session ID. |
+
+OpenCode is restricted to the free models in [router_config.json](router_config.json). Claude is **not free**: only configured Haiku/Sonnet models under the router's cost ceiling are allowed. Actual availability and charges depend on your provider account.
 
 ---
 
-## Architecture and Core Principles
+## What You Get
 
-### 1. Zero-Cost Engine Hierarchy
-When a task is submitted, AI Factory delegates work sequentially across configured engines:
+| Feature | What it does |
+|---|---|
+| Smart routing | Starts routine tasks with Puter Flash; explicit requests can select OpenCode, Claude, Muse, or Codex. |
+| Model guardrails | Rejects paid OpenCode IDs and Claude IDs outside the configured Haiku/Sonnet cost ceiling. |
+| Engine-specific fallback | Puter, Muse, and Codex have their own fallback order; OpenCode/Claude hand back to Gemini rather than trying another paid engine. |
+| Named sessions | `--name` stores a session; `--resume` continues it when the CLI supplied an ID. |
+| Execution report | `path` lists only engines attempted in **this** router call; `succeed_with` names the successful engine or Gemini handoff. |
+| Health checks | Configurable watchdog and circuit breaker detect stalled or quarantined engines. `--quota` checks Puter, Muse, Codex, and Antigravity, not OpenCode/Claude. |
 
-1. **Puter Flash (DeepSeek Flash - $0):** Default engine for repository analysis, file structure mapping, function inspection, and general codebase exploration.
-2. **Puter Pro (DeepSeek R1/Pro - $0):** Activated for deep algorithmic reasoning, mathematical optimization, and structural refactoring.
-3. **Muse Coding Agent (muse-spark-1.3-contributor - $0):** Primary autonomous fallback powered by Meta, hard-locked to contributor mode to prevent billed usage.
-4. **OpenAI Codex (GPT-6 / 5.6):** Secondary fallback and sandbox execution engine.
-5. **Antigravity / Gemini:** Final orchestrator responsible for surgical application and user delivery.
+## Architecture
 
-### 2. Staged Watchdog Protocol (30s -> 120s -> 240s)
-Background tasks are monitored through a multi-stage watchdog to detect timeouts or interactive prompts without early cancellation:
-- **Stage 1 (30s):** Fast health check for immediate failures or prompts.
-- **Stage 2 (120s):** Standard execution check for ongoing tasks.
-- **Stage 3 (240s):** Extended window for intensive refactoring jobs.
-- All stages strictly use `TimerCondition='never'` to ensure progress logs do not prematurely dismiss timers.
+[Interactive system diagram HTML](docs/diagrams/ai-factory-architecture.html) · [Interactive routing flow HTML](docs/diagrams/ai-factory-routing.html) · [Architecture notes](docs/ARCHITECTURE.md)
 
-### 3. Dynamic Execution Path Reporting
-Every execution records and displays only the engines that were actively engaged:
-```text
-path: gemini --> puter(deepseek-flash) [OK]
-succeed_with: puter
-```
+![AI Factory system architecture](docs/diagrams/ai-factory-architecture.visual-check.1440x900.light.png)
 
-### 4. Global Plugin and Hook Integration
-AI Factory registers globally inside Antigravity through event hooks (`hooks.json`, `hook_handler.js`), providing persistent token offloading across all workspaces and conversations without manual invocation.
+![AI Factory routing flow](docs/diagrams/ai-factory-routing.visual-check.1440x900.light.png)
 
-### 5. Multi-Provider Quota Tracker
-Real-time quota monitoring across Puter, Muse, Codex, and Antigravity via RPC and official metering endpoints.
+The Antigravity plugin adds routing guidance; the local router selects a CLI, applies model and health checks, records sessions, and prints the result. A Gemini handoff means the parent agent must finish the task—it is not proof that the task is complete. The diagrams are authored in Turkish; their fixed viewer controls remain in English.
+GitHub shows the PNG previews above; download either HTML file and open it locally for search, focus views, and theme switching.
 
 ---
 
@@ -49,6 +48,9 @@ ai_factory/
 ├── check_quotas.ps1           # PowerShell quota check runner
 ├── deploy_skill.mjs           # Distribution script for global Antigravity dirs
 ├── router_config.json         # Engine models and watchdog parameters
+├── docs/
+│   ├── ARCHITECTURE.md         # Routing policy and report semantics
+│   └── diagrams/              # Interactive architecture and workflow diagrams
 ├── src/                       # Core implementation modules
 │   ├── router.mjs
 │   ├── server.mjs
@@ -77,8 +79,20 @@ ai_factory/
 ## Installation and Deployment
 
 ### Prerequisites
-- Node.js 18 or higher
-- Antigravity CLI (`agy`) or Antigravity IDE
+
+| To use | Required locally |
+|---|---|
+| AI Factory | Node.js 22 or newer (`package.json` requirement) |
+| Antigravity integration | Antigravity CLI (`agy`) or Antigravity IDE |
+| OpenCode tasks | OpenCode CLI installed and signed in to a provider with the selected free model |
+| Claude tasks | Claude Code CLI installed and signed in; your account may incur charges |
+| Puter, Muse, Codex tasks | The corresponding CLI/service configured on this computer |
+
+| Install step | Command | Result |
+|---|---|---|
+| Dependencies | `npm install` | Installs the local Puter bridge dependency. |
+| Global Antigravity plugin | `node deploy_skill.mjs` | Installs plugin, hooks, and rules. |
+| Native CLI/IDE skill catalog | `node deploy_skill.mjs --builtin` | Also adds the built-in AI Factory skill where the host catalog exists. |
 
 ### Setup
 1. Clone the repository:
@@ -143,10 +157,35 @@ node router.mjs --engine muse --task "Implement missing unit tests for the route
 node router.mjs --engine codex --model gpt-6.1-sol --task "Produce architectural refactoring roadmap"
 ```
 
+### OpenCode Free Models
+```bash
+node router.mjs --engine opencode --model deepseek-v4.1-flash-free --name review --task "Review the router"
+node router.mjs --engine opencode --model mimo-v2.6-flash-free --task "Find the failing test"
+```
+Change `--model` to another free model listed in `router_config.json`. Paid OpenCode model IDs are rejected. Free availability can change at the provider.
+
+### Claude Code (lower-cost models)
+```bash
+node router.mjs --engine claude --model haiku-5.5 --name draft --task "Summarize this repository"
+node router.mjs --engine claude --model sonnet-5.5 --task "Review the router"
+```
+Claude Code must already be signed in. These models use your Claude account's quota or billing; they are not free. Opus and Fable are excluded.
+
+`haiku-5.5` is the configured default. Only the four Claude entries in `router_config.json` are accepted; a model's presence in the config does not guarantee access on your account. The router keeps Claude's `--fallback-model` on the same selected model, so the Claude CLI cannot silently switch to a more expensive model.
+
 ### Resuming Previous Session
 ```bash
 node router.mjs --resume "session-name" --task "Continue refactoring"
+node router.mjs --resume "review" --model mimo-v2.6-flash-free --task "Now inspect the tests"
 ```
+OpenCode and Claude allow a different configured `--model` when resuming. A missing session or a missing provider session ID is reported as an error; the router does not silently start a new conversation.
+
+### Reading the Report
+```text
+path: gemini --> opencode(opencode/deepseek-v4.1-flash-free) [OK]
+succeed_with: opencode-opencode/deepseek-v4.1-flash-free
+```
+`path` covers one invocation only. If you called the router twice, the second report will not include engines tried by the first call. A failed or quarantined engine is included only when that same call attempted it.
 
 ### Live Quota Status Check
 ```bash
@@ -163,6 +202,7 @@ Or via PowerShell:
 
 - Authentication tokens (`puter_token.txt`) and session registries are listed in `.gitignore` to prevent credential exposure.
 - Muse integration is hard-locked to `muse-spark-1.3-contributor`, preventing accidental charges from billed models.
+- OpenCode and Claude model IDs are checked before either CLI starts. Claude still uses your own account and may be billed.
 
 ---
 

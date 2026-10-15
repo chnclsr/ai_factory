@@ -11,8 +11,11 @@ Options:
 - --engine puter --model pro: complex work.
 - --engine muse: contributor model.
 - --engine codex --model <available-model>: explicit Codex request.
+- --engine opencode --model <free-model>: OpenCode's configured free models; defaults to deepseek-v4.1-flash-free.
+- --engine claude --model haiku-5.5|haiku-4.5|sonnet-5|sonnet-5.5: Claude Code with the configured lower-cost models; defaults to Haiku 5.5.
 - --name <name>: save a named session.
 - --resume <name> --task "<follow-up>": resume when the engine provides a session ID.
+- --resume <name> --model <allowed-model> --task "<follow-up>": switch models in a saved OpenCode or Claude session.
 - --quota: refresh quota information.
 - --no-fallback: stop after the selected engine fails.
 

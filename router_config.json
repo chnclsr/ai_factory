@@ -95,6 +95,34 @@
         }
       }
     },
+    "opencode": {
+      "type": "opencode_cli",
+      "default_model": "deepseek-v4.1-flash-free",
+      "models": {
+        "deepseek-v4.1-flash-free": { "id": "opencode/deepseek-v4.1-flash-free", "cost_input_per_m": 0, "cost_output_per_m": 0 },
+        "mimo-v2.6-flash-free": { "id": "opencode/mimo-v2.6-flash-free", "cost_input_per_m": 0, "cost_output_per_m": 0 },
+        "muse-spark-1.3-contributor-free": { "id": "opencode/muse-spark-1.3-contributor-free", "cost_input_per_m": 0, "cost_output_per_m": 0 },
+        "mimo-v2.5-free": { "id": "opencode/mimo-v2.5-free", "cost_input_per_m": 0, "cost_output_per_m": 0 },
+        "nemotron-3-ultra-free": { "id": "opencode/nemotron-3-ultra-free", "cost_input_per_m": 0, "cost_output_per_m": 0 },
+        "nemotron-3.5-lightning-free": { "id": "opencode/nemotron-3.5-lightning-free", "cost_input_per_m": 0, "cost_output_per_m": 0 },
+        "longcat-2.5-preview-free": { "id": "opencode/longcat-2.5-preview-free", "cost_input_per_m": 0, "cost_output_per_m": 0 },
+        "step-5-preview-free": { "id": "opencode/step-5-preview-free", "cost_input_per_m": 0, "cost_output_per_m": 0 },
+        "exo-free": { "id": "opencode/exo-free", "cost_input_per_m": 0, "cost_output_per_m": 0 },
+        "space-bunny-free": { "id": "opencode/space-bunny-free", "cost_input_per_m": 0, "cost_output_per_m": 0 },
+        "cat-jam-free": { "id": "opencode/cat-jam-free", "cost_input_per_m": 0, "cost_output_per_m": 0 },
+        "big-pickle": { "id": "opencode/big-pickle", "cost_input_per_m": 0, "cost_output_per_m": 0 }
+      }
+    },
+    "claude": {
+      "type": "claude_cli",
+      "default_model": "haiku-5.5",
+      "models": {
+        "haiku-5.5": { "id": "claude-haiku-5-5", "cost_input_per_m": 0.10, "cost_output_per_m": 0.50 },
+        "haiku-4.5": { "id": "claude-haiku-4-5-20251001", "cost_input_per_m": 1, "cost_output_per_m": 5 },
+        "sonnet-5": { "id": "claude-sonnet-5", "cost_input_per_m": 2, "cost_output_per_m": 10 },
+        "sonnet-5.5": { "id": "claude-sonnet-5-5", "cost_input_per_m": 2, "cost_output_per_m": 10 }
+      }
+    },
     "muse": {
       "type": "muse_cli",
       "cost_usd": 0.0,
@@ -128,6 +156,8 @@
   },
   "routing_rules": {
     "prefer_free_puter": true,
+    "opencode_keywords": ["opencode", "open code"],
+    "claude_keywords": ["claude"],
     "complexity_keywords_pro": [
       "optimizasyon", "mimari", "algoritma", "refactor", "benchmark", "derin", "matematik", "tasarim", "kompleks"
     ],

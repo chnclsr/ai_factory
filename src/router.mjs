@@ -208,12 +208,12 @@ function classifyError(exitCode, outputText, resMeta = {}) {
   }
 
   // 3. Desteklenmeyen Model veya Auth Hatas\u0131
-  if (text.includes('not supported when using codex with a chatgpt account') || text.includes('model not found') || text.includes('unauthorized')) {
+  if (text.includes('not supported when using codex with a chatgpt account') || text.includes('model not found') || text.includes('model unavailable') || text.includes('unauthorized')) {
     return {
       kind: 'unsupported_model',
       fallbackEligible: true,
       quarantine: false,
-      reason: 'ChatGPT hesab\u0131 bu model kimli\u011fini desteklemiyor'
+      reason: 'Hesap bu modeli desteklemiyor veya model şu anda kullanılamıyor'
     };
   }
 
@@ -275,6 +275,26 @@ async function runCommand(cmdString, cwd, engineName, config) {
   const checkIntervalMs = config?.watchdog?.check_interval_ms || 5000;
   const startTime = Date.now();
   let hasReceivedAnyOutput = false;
+  let sessionId = null;
+  let hasResponse = false;
+  let cliError = false;
+  let jsonRemainder = '';
+  function inspectJsonLine(line) {
+    try {
+      const event = JSON.parse(line);
+      sessionId = event.sessionID || event.session_id || sessionId;
+      if (event.type === 'error' || event.is_error) cliError = true;
+      if (event.type === 'text' && event.part?.text) {
+        hasResponse = true;
+        process.stdout.write(event.part.text + '\n');
+      }
+      if (event.type === 'result' && event.result) {
+        hasResponse = true;
+        process.stdout.write(event.result + '\n');
+      }
+      if (event.type === 'error') process.stderr.write(line + '\n');
+    } catch (e) {}
+  }
 
   return new Promise((resolve, reject) => {
     console.log(`\n[AI Factory Launcher] Running in ${cwd}:`);
@@ -303,9 +323,15 @@ async function runCommand(cmdString, cwd, engineName, config) {
       hasReceivedAnyOutput = true;
       lastActivityAt = Date.now();
       const str = chunk.toString('utf8');
-      if (streamName === 'stdout') {
+      if (streamName === 'stdout' && (engineName === 'opencode' || engineName === 'claude')) {
+        jsonRemainder += str;
+        const jsonLines = jsonRemainder.split('\n');
+        jsonRemainder = jsonLines.pop();
+        for (const line of jsonLines) inspectJsonLine(line);
+      }
+      if (streamName === 'stdout' && engineName !== 'opencode' && engineName !== 'claude') {
         process.stdout.write(str);
-      } else {
+      } else if (streamName === 'stderr') {
         process.stderr.write(str);
       }
       const lines = str.split('\n');
@@ -366,13 +392,17 @@ async function runCommand(cmdString, cwd, engineName, config) {
       if (isFinished) return;
       isFinished = true;
       clearInterval(watchdogInterval);
+      if (jsonRemainder.trim() && (engineName === 'opencode' || engineName === 'claude')) inspectJsonLine(jsonRemainder);
       // P1 D\u00fczeltmesi: Sinyalle kapat\u0131ld\u0131ysa (signal != null) veya code null ise asla 0 sayma!
       const effectiveCode = signal ? 1 : (code ?? 1);
       resolve({
         exitCode: effectiveCode,
         signal,
         watchdogTimeout: false,
-        output: tailBuffer.join('\n')
+        output: tailBuffer.join('\n'),
+        sessionId,
+        hasResponse,
+        cliError
       });
     });
 
@@ -431,7 +461,7 @@ function parseCliArgs() {
 function decideEngineAndModel(task, config, forcedEngine, forcedModel) {
   if (forcedEngine) {
     const engine = forcedEngine.toLowerCase();
-    let model = forcedModel || (engine === 'codex' ? 'gpt-6.1-sol' : engine === 'gemini' ? 'gemini' : engine === 'muse' ? 'muse-spark-1.3-contributor' : 'flash');
+    let model = forcedModel || config?.engines?.[engine]?.default_model || (engine === 'codex' ? 'gpt-6.1-sol' : engine === 'gemini' ? 'gemini' : engine === 'muse' ? 'muse-spark-1.3-contributor' : 'flash');
     if (engine === 'muse') {
       // G\u00dcVENL\u0130K K\u0130L\u0130D\u0130: Muse i\u00e7in \u00fccretli model ASLA kullan\u0131lamaz, her zaman 0$ muse-spark-1.3-contributor olmal\u0131d\u0131r!
       model = 'muse-spark-1.3-contributor';
@@ -445,6 +475,14 @@ function decideEngineAndModel(task, config, forcedEngine, forcedModel) {
   for (const kw of (config?.routing_rules?.gemini_keywords || [])) {
     if (lower.includes(kw)) {
       return { engine: 'gemini', model: 'gemini', reason: `Gemini do\u011frudan devam anahtar kelimesi: "${kw}"` };
+    }
+  }
+
+  for (const engine of ['opencode', 'claude']) {
+    for (const kw of (config?.routing_rules?.[`${engine}_keywords`] || [])) {
+      if (lower.includes(kw)) {
+        return { engine, model: config.engines[engine].default_model, reason: `${engine} anahtar kelimesi: ${kw}` };
+      }
     }
   }
 
@@ -609,6 +647,50 @@ async function executeCodex(task, model, cwd, resumeSessionId, config) {
   }
 }
 
+function resolveExternalModel(engine, model, config) {
+  const models = config?.engines?.[engine]?.models || {};
+  const entry = models[model] || Object.values(models).find(item => item.id === model);
+  if (!entry || !/^[a-z0-9./-]+$/.test(entry.id)) throw new Error(`Unsupported ${engine} model: ${model}`);
+  if (engine === 'opencode' && (entry.cost_input_per_m !== 0 || entry.cost_output_per_m !== 0 ||
+    !/^opencode\/(?:big-pickle|[a-z0-9.-]+-free)$/.test(entry.id))) {
+    throw new Error(`OpenCode model is not verified free: ${entry.id}`);
+  }
+  if (engine === 'claude' && !/^claude-(?:haiku|sonnet)-[a-z0-9-]+$/.test(entry.id)) {
+    throw new Error(`Claude model is outside the low-cost allowlist: ${entry.id}`);
+  }
+  if (engine === 'claude' && (entry.cost_input_per_m > 2 || entry.cost_output_per_m > 10 ||
+    !Number.isFinite(entry.cost_input_per_m) || !Number.isFinite(entry.cost_output_per_m))) {
+    throw new Error(`Claude model exceeds the configured cost ceiling: ${entry.id}`);
+  }
+  return entry.id;
+}
+
+async function executeOpenCode(task, model, cwd, resumeSessionId, config) {
+  const promptFile = stateFile(`.opencode_prompt_${Date.now()}_${crypto.randomUUID()}.txt`);
+  fs.writeFileSync(promptFile, task, 'utf8');
+  let cmd = `opencode run --format json --model ${model}`;
+  if (resumeSessionId) cmd += ` --session ${resumeSessionId}`;
+  cmd += ` "Follow the instructions in the attached task file." --file "${promptFile}"`;
+  try {
+    return await runCommand(cmd, cwd, 'opencode', config);
+  } finally {
+    try { fs.unlinkSync(promptFile); } catch (e) {}
+  }
+}
+
+async function executeClaude(task, model, cwd, resumeSessionId, config) {
+  const promptFile = stateFile(`.claude_prompt_${Date.now()}_${crypto.randomUUID()}.txt`);
+  fs.writeFileSync(promptFile, task, 'utf8');
+  let cmd = `claude -p --output-format json --model ${model} --fallback-model ${model} --permission-mode acceptEdits --permission-prompts none`;
+  if (resumeSessionId) cmd += ` --resume ${resumeSessionId}`;
+  cmd += ` < "${promptFile}"`;
+  try {
+    return await runCommand(cmd, cwd, 'claude', config);
+  } finally {
+    try { fs.unlinkSync(promptFile); } catch (e) {}
+  }
+}
+
 function resolveMuseModel(rawModel, config) {
   // G\u00dcVENL\u0130K K\u0130L\u0130D\u0130 (HARD-LOCK):
   // Muse her zaman ve istisnas\u0131z 0$ \u00fccretsiz olan 'muse-spark-1.3-contributor' modelini kullanmal\u0131d\u0131r!
@@ -670,7 +752,7 @@ async function main() {
 
   const options = parseCliArgs();
   const config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
-  if (options.engine && !['puter', 'muse', 'codex', 'gemini'].includes(options.engine)) throw new Error('Unknown engine: ' + options.engine);
+  if (options.engine && !['puter', 'muse', 'codex', 'opencode', 'claude', 'gemini'].includes(options.engine)) throw new Error('Unknown engine: ' + options.engine);
   for (const [key, value] of Object.entries({ model: options.model, cwd: options.cwd })) {
     if (/[\x00-\x1f"%&|<>^!$\x60]/.test(value)) throw new Error('Unsafe shell argument: ' + key);
   }
@@ -690,7 +772,7 @@ AI Factory Smart Router CLI (v2.1 - Hardened & Supervised)
 Kullan\u0131m:
   node router.mjs --task "G\u00f6rev metni" [--name "oturum-adi"] [--cwd "dizin"]
   node router.mjs --resume "oturum-adi" --task "Devam sorusu"
-  node router.mjs --engine codex|puter|muse [--model luna|sol|pro|flash] --task "..."
+  node router.mjs --engine codex|puter|muse|opencode|claude [--model model-adi] --task "..."
   node router.mjs --quota   # Puter, Codex, Antigravity ve Muse canl\u0131 kotalar\u0131n\u0131 listeler
     `);
     process.exit(0);
@@ -705,12 +787,12 @@ Kullan\u0131m:
     const existing = Object.hasOwn(registry.sessions, options.resume) ? registry.sessions[options.resume] : null;
     if (existing) {
       targetEngine = existing.engine;
-      targetModel = existing.model;
+      targetModel = (targetEngine === 'opencode' || targetEngine === 'claude') && options.model ? options.model : existing.model;
       resumeSessionId = existing.sessionId;
       options.cwd = existing.cwd || options.cwd;
       console.log(`[AI Factory Registry] '${options.resume}' adl\u0131 oturum bulundu -> Motor: ${targetEngine}, Model: ${targetModel}, Session ID: ${resumeSessionId}`);
     } else {
-      console.warn(`[AI Factory Warning] '${options.resume}' isimli oturum bulunamad\u0131. Yeni ba\u015flat\u0131l\u0131yor.`);
+      throw new Error(`Session not found: ${options.resume}`);
     }
   }
 
@@ -719,6 +801,15 @@ Kullan\u0131m:
     targetEngine = targetEngine || decision.engine;
     targetModel = targetModel || decision.model;
     console.log(`[AI Factory Smart Router] Karar: ${targetEngine.toUpperCase()} (${targetModel}) -> Neden: ${decision.reason}`);
+  }
+
+  if (targetEngine === 'opencode' || targetEngine === 'claude') {
+    const resolvedModel = resolveExternalModel(targetEngine, targetModel, config);
+    if (options.resume && !resumeSessionId) throw new Error(`${targetEngine} session has no ID to resume`);
+    if (resumeSessionId && !(targetEngine === 'opencode' ? /^ses_[A-Za-z0-9]+$/ : /^[0-9a-fA-F-]{36}$/).test(resumeSessionId)) {
+      throw new Error(`Invalid ${targetEngine} session ID`);
+    }
+    targetModel = resolvedModel;
   }
 
   if (targetEngine === 'gemini') {
@@ -741,7 +832,37 @@ Kullan\u0131m:
   let lastSessionId = null;
 
   // \u2500\u2500 1. Hedef Motor Puter ise: Puter -> Muse -> Codex -> Gemini \u2500\u2500
-  if (targetEngine === 'puter') {
+  if (targetEngine === 'opencode' || targetEngine === 'claude') {
+    choices.push(targetEngine);
+    const gate = canExecuteEngine(targetEngine, config);
+    if (!gate.allowed) {
+      pathSteps.push(`${targetEngine}(${targetModel}) [QUARANTINED]`);
+      errors.push(`${targetEngine} (quarantined: ${gate.reason})`);
+    } else {
+      try {
+        const execute = targetEngine === 'opencode' ? executeOpenCode : executeClaude;
+        const res = await execute(options.task, targetModel, options.cwd, resumeSessionId, config);
+        lastOutput = res.output;
+        lastSessionId = res.sessionId;
+        if (res.exitCode === 0 && !res.watchdogTimeout && !res.cliError && res.hasResponse) {
+          succeedWith = `${targetEngine}-${targetModel}`;
+          recordEngineSuccess(targetEngine, config);
+          pathSteps.push(`${targetEngine}(${targetModel}) [OK]`);
+        } else {
+          const classified = classifyError(res.exitCode, res.output, res);
+          recordEngineFailure(targetEngine, classified, config);
+          errors.push(`${targetEngine}-${targetModel} (${classified.reason})`);
+          pathSteps.push(`${targetEngine}(${targetModel}) [FAIL: ${classified.reason}]`);
+          if (!classified.fallbackEligible) options.engine = 'aborted';
+        }
+      } catch (err) {
+        const classified = classifyError(1, err.message);
+        recordEngineFailure(targetEngine, classified, config);
+        errors.push(`${targetEngine} (${err.message})`);
+        pathSteps.push(`${targetEngine}(${targetModel}) [FAIL: ${err.message}]`);
+      }
+    }
+  } else if (targetEngine === 'puter') {
     if (!choices.includes('puter')) choices.push('puter');
     const gate = canExecuteEngine('puter', config);
     if (!gate.allowed) {
@@ -1092,16 +1213,20 @@ Kullan\u0131m:
   // Oturum kayd\u0131 (\u00c7\u0131kt\u0131dan dinamik session id yakalan\u0131r)
   if (succeedWith && sessionName) {
     const extractedId = lastSessionId || extractSessionId(lastOutput) || resumeSessionId;
-    if (['__proto__', 'constructor', 'prototype'].includes(sessionName)) throw new Error('Invalid session name');
-    registry.sessions[sessionName] = {
-      engine: targetEngine,
-      model: targetModel,
-      sessionId: extractedId,
-      cwd: options.cwd,
-      updated_at: new Date().toISOString()
-    };
-    saveJson(REGISTRY_FILE, registry);
-    console.log(`[AI Factory Registry] Oturum '${sessionName}' ad\u0131yla kaydedildi (${extractedId ? 'ID: ' + extractedId : 'yeni'}).`);
+    if ((targetEngine === 'opencode' || targetEngine === 'claude') && !extractedId) {
+      console.warn(`[AI Factory Registry] ${targetEngine} session ID was not returned; '${sessionName}' was not saved.`);
+    } else {
+      if (['__proto__', 'constructor', 'prototype'].includes(sessionName)) throw new Error('Invalid session name');
+      registry.sessions[sessionName] = {
+        engine: targetEngine,
+        model: targetModel,
+        sessionId: extractedId,
+        cwd: options.cwd,
+        updated_at: new Date().toISOString()
+      };
+      saveJson(REGISTRY_FILE, registry);
+      console.log(`[AI Factory Registry] Oturum '${sessionName}' ad\u0131yla kaydedildi (${extractedId ? 'ID: ' + extractedId : 'yeni'}).`);
+    }
   }
 
   // Standart Rapor \u00c7\u0131kt\u0131s\u0131 (Path zinciri ile)

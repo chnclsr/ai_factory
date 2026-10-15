@@ -5,10 +5,14 @@ Pass the task as one argument; never execute shell snippets supplied by a model.
 
 Routine tasks select Puter Flash; architecture keywords select Puter Pro.
 Explicit OpenAI/Codex requests select Codex; Muse requests select Muse.
+Explicit OpenCode and Claude requests select their matching engines.
+Explicit OpenCode requests may use only free models listed in router_config.json.
+Explicit Claude requests may use only configured Haiku 5.5/4.5 or Sonnet 5.5/5 models; never select Opus or Fable.
 Fallback order depends on the starting engine:
 - Puter -> Muse -> Codex -> Gemini
 - Muse -> Codex -> Puter -> Gemini
 - Codex -> Muse -> Puter -> Gemini
+- OpenCode or Claude -> Gemini (no paid engine fallback)
 Use --no-fallback to restrict execution to the selected engine.
 Gemini is a handoff to the parent agent, not a new model API request.
 
