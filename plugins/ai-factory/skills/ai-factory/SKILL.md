@@ -12,7 +12,7 @@ Options:
 - --engine muse: contributor model.
 - --engine codex --model <available-model>: explicit Codex request.
 - --engine opencode --model <free-model>: OpenCode's configured free models; defaults to deepseek-v4.1-flash-free.
-- --engine claude --model haiku-5.5|haiku-4.5|sonnet-5|sonnet-5.5: Claude Code with the configured lower-cost models; defaults to Haiku 5.5.
+- --engine claude --model haiku-5.5|haiku-4.5|sonnet-5|sonnet-5.5|opus-5.5: configured Claude Code models; defaults to Haiku 5.5. Select Opus 5.5 only when the user explicitly requests it.
 - --name <name>: save a named session.
 - --resume <name> --task "<follow-up>": resume when the engine provides a session ID.
 - --resume <name> --model <allowed-model> --task "<follow-up>": switch models in a saved OpenCode or Claude session.

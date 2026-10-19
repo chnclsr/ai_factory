@@ -7,7 +7,7 @@ Routine tasks select Puter Flash; architecture keywords select Puter Pro.
 Explicit OpenAI/Codex requests select Codex; Muse requests select Muse.
 Explicit OpenCode and Claude requests select their matching engines.
 Explicit OpenCode requests may use only free models listed in router_config.json.
-Explicit Claude requests may use only configured Haiku 5.5/4.5 or Sonnet 5.5/5 models; never select Opus or Fable.
+Explicit Claude requests may use only configured Haiku 5.5/4.5, Sonnet 5.5/5, or Opus 5.5 models. When the user requests Opus 5.5, pass --engine claude --model opus-5.5. Otherwise use the configured Haiku default. Other Opus versions and Fable are excluded.
 Fallback order depends on the starting engine:
 - Puter -> Muse -> Codex -> Gemini
 - Muse -> Codex -> Puter -> Gemini

@@ -481,7 +481,9 @@ function decideEngineAndModel(task, config, forcedEngine, forcedModel) {
   for (const engine of ['opencode', 'claude']) {
     for (const kw of (config?.routing_rules?.[`${engine}_keywords`] || [])) {
       if (lower.includes(kw)) {
-        return { engine, model: config.engines[engine].default_model, reason: `${engine} anahtar kelimesi: ${kw}` };
+        const model = engine === 'claude' && /\bopus(?:\s+|-)5[.-]5\b/.test(lower)
+          ? 'opus-5.5' : config.engines[engine].default_model;
+        return { engine, model, reason: `${engine} anahtar kelimesi: ${kw}` };
       }
     }
   }
@@ -655,12 +657,15 @@ function resolveExternalModel(engine, model, config) {
     !/^opencode\/(?:big-pickle|[a-z0-9.-]+-free)$/.test(entry.id))) {
     throw new Error(`OpenCode model is not verified free: ${entry.id}`);
   }
-  if (engine === 'claude' && !/^claude-(?:haiku|sonnet)-[a-z0-9-]+$/.test(entry.id)) {
-    throw new Error(`Claude model is outside the low-cost allowlist: ${entry.id}`);
-  }
-  if (engine === 'claude' && (entry.cost_input_per_m > 2 || entry.cost_output_per_m > 10 ||
-    !Number.isFinite(entry.cost_input_per_m) || !Number.isFinite(entry.cost_output_per_m))) {
-    throw new Error(`Claude model exceeds the configured cost ceiling: ${entry.id}`);
+  if (engine === 'claude') {
+    const opus55 = entry.id === 'claude-opus-5-5';
+    if (!opus55 && !/^claude-(?:haiku|sonnet)-[a-z0-9-]+$/.test(entry.id)) {
+      throw new Error(`Claude model is outside the configured allowlist: ${entry.id}`);
+    }
+    if (entry.cost_input_per_m > (opus55 ? 4 : 2) || entry.cost_output_per_m > (opus55 ? 20 : 10) ||
+      !Number.isFinite(entry.cost_input_per_m) || !Number.isFinite(entry.cost_output_per_m)) {
+      throw new Error(`Claude model exceeds the configured cost ceiling: ${entry.id}`);
+    }
   }
   return entry.id;
 }

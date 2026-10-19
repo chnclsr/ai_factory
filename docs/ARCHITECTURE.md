@@ -12,7 +12,7 @@ The plugin's `PreInvocation` / `PreToolUse` hooks live in `plugins/ai-factory/ho
 | Muse | Explicit or configured Muse keywords | Codex → Puter → Gemini handoff |
 | Codex | Explicit or configured Codex keywords | Muse → Puter → Gemini handoff |
 | OpenCode | Explicit or OpenCode keywords; only free allowlisted models | Gemini handoff |
-| Claude | Explicit or Claude keywords; only configured Haiku/Sonnet models | Gemini handoff |
+| Claude | Explicit or Claude keywords; Haiku by default, Opus 5.5 when explicitly requested | Gemini handoff |
 
 An explicit `--engine` wins over keyword selection. OpenCode and Claude model aliases resolve through `router_config.json`, then pass an allowlist and cost check before execution. The router invokes their local CLIs with JSON output, captures response text and session ID, and records a named session only when the provider returns an ID. On resume, the saved engine and working directory are reused; OpenCode and Claude permit switching to another allowed model. CLI authentication and actual provider access are external prerequisites.
 

@@ -10,7 +10,7 @@ AI Factory routes coding and repository work from Antigravity/Gemini to local AI
 | Lose track of which engine ran or whether a fallback happened. | Read one execution report with the actual `path` and `succeed_with`. |
 | Start over on a follow-up. | Save a named session and resume it when that CLI returns a session ID. |
 
-OpenCode is restricted to the free models in [router_config.json](router_config.json). Claude is **not free**: only configured Haiku/Sonnet models under the router's cost ceiling are allowed. Actual availability and charges depend on your provider account.
+OpenCode is restricted to the free models in [router_config.json](router_config.json). Claude uses your account's quota or billing: configured Haiku/Sonnet models and explicitly requested Opus 5.5 are allowed. Actual availability and charges depend on your provider account.
 
 ---
 
@@ -19,7 +19,7 @@ OpenCode is restricted to the free models in [router_config.json](router_config.
 | Feature | What it does |
 |---|---|
 | Smart routing | Starts routine tasks with Puter Flash; explicit requests can select OpenCode, Claude, Muse, or Codex. |
-| Model guardrails | Rejects paid OpenCode IDs and Claude IDs outside the configured Haiku/Sonnet cost ceiling. |
+| Model guardrails | Rejects paid OpenCode IDs and unlisted Claude models; Opus 5.5 requires an explicit request. |
 | Engine-specific fallback | Puter, Muse, and Codex have their own fallback order; OpenCode/Claude hand back to Gemini rather than trying another paid engine. |
 | Named sessions | `--name` stores a session; `--resume` continues it when the CLI supplied an ID. |
 | Execution report | `path` lists only engines attempted in **this** router call; `succeed_with` names the successful engine or Gemini handoff. |
@@ -164,14 +164,15 @@ node router.mjs --engine opencode --model mimo-v2.6-flash-free --task "Find the 
 ```
 Change `--model` to another free model listed in `router_config.json`. Paid OpenCode model IDs are rejected. Free availability can change at the provider.
 
-### Claude Code (lower-cost models)
+### Claude Code
 ```bash
 node router.mjs --engine claude --model haiku-5.5 --name draft --task "Summarize this repository"
 node router.mjs --engine claude --model sonnet-5.5 --task "Review the router"
+node router.mjs --engine claude --model opus-5.5 --no-fallback --task "Review the architecture"
 ```
-Claude Code must already be signed in. These models use your Claude account's quota or billing; they are not free. Opus and Fable are excluded.
+Claude Code must already be signed in. These models use your Claude account's quota or billing. Opus 5.5 is available with `--engine claude --model opus-5.5` (or `--model claude-opus-5-5`); a task that explicitly names "Opus 5.5" also selects it. Other Opus versions and Fable are excluded. `--no-fallback` stops after a Claude failure instead of handing the task back to Gemini.
 
-`haiku-5.5` is the configured default. Only the four Claude entries in `router_config.json` are accepted; a model's presence in the config does not guarantee access on your account. The router keeps Claude's `--fallback-model` on the same selected model, so the Claude CLI cannot silently switch to a more expensive model.
+`haiku-5.5` is the configured default. Only the five Claude entries in `router_config.json` are accepted; a model's presence in the config does not guarantee access on your account. The router keeps Claude's `--fallback-model` on the same selected model, so the Claude CLI cannot silently switch to a more expensive model.
 
 ### Resuming Previous Session
 ```bash
