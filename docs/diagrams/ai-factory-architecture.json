@@ -2,47 +2,48 @@
   "schema_version": 1,
   "diagram_type": "architecture",
   "meta": {
-    "title": "AI Factory sistem mimarisi",
+    "title": "AI Factory system architecture",
     "quality_profile": "showcase",
+    "locale": "en",
     "animation": "none",
     "views": [
-      { "id": "giristen-karara", "label": "Giriş ve karar", "focus": ["host", "hooks", "router", "policy"], "note": "Antigravity isteği kurallarla yönlendiriciye taşır." },
-      { "id": "motorlar", "label": "Çalıştırma motorları", "focus": ["router", "puter", "muse", "codex", "opencode", "claude"], "note": "Yerel CLI bağlayıcıları seçilen sağlayıcıyı çalıştırır." },
-      { "id": "durum", "label": "Durum ve teslim", "focus": ["router", "registry", "gemini"], "note": "Oturumlar saklanır; sonuç veya Gemini devri raporlanır." }
+      { "id": "giristen-karara", "label": "Input and routing", "focus": ["host", "hooks", "router", "policy"], "note": "Antigravity passes the task to the router through plugin rules." },
+      { "id": "motorlar", "label": "Execution engines", "focus": ["router", "puter", "muse", "codex", "opencode", "claude"], "note": "Local CLI adapters run the selected provider." },
+      { "id": "durum", "label": "State and handoff", "focus": ["router", "registry", "gemini"], "note": "Sessions are saved; the report records a result or Gemini handoff." }
     ]
   },
   "layout": { "mode": "grid", "origin": [46, 58], "cols": 5, "gapX": 70, "gapY": 52, "cellW": 164, "cellH": 70 },
   "components": [
-    { "id": "host", "type": "external", "label": "Antigravity", "sublabel": "Kullanıcı görevi", "row": 2, "col": 0 },
-    { "id": "hooks", "type": "frontend", "label": "Plugin ve kancalar", "sublabel": "Kural enjeksiyonu", "row": 2, "col": 1 },
-    { "id": "router", "type": "backend", "label": "AI Factory Router", "sublabel": "Seçim, deneme, rapor", "row": 2, "col": 2 },
-    { "id": "policy", "type": "security", "label": "Model politikası", "sublabel": "İzin ve maliyet", "row": 0, "col": 2 },
-    { "id": "registry", "type": "database", "label": "Yerel durum", "sublabel": "Oturum ve sağlık kaydı", "row": 4, "col": 2 },
-    { "id": "puter", "type": "backend", "label": "Puter köprüsü", "sublabel": "dsh + yerel servis", "row": 0, "col": 4 },
-    { "id": "muse", "type": "external", "label": "Muse CLI", "sublabel": "Contributor modeli", "row": 1, "col": 4 },
-    { "id": "codex", "type": "external", "label": "Codex CLI", "sublabel": "Mevcut hesap", "row": 2, "col": 4 },
-    { "id": "opencode", "type": "external", "label": "OpenCode CLI", "sublabel": "İzinli ücretsiz modeller", "row": 3, "col": 4 },
-    { "id": "claude", "type": "external", "label": "Claude Code CLI", "sublabel": "İzinli düşük maliyet", "row": 4, "col": 4 },
-    { "id": "gemini", "type": "frontend", "label": "Gemini devri", "sublabel": "Üst ajan işi sürdürür", "row": 4, "col": 0 }
+    { "id": "host", "type": "external", "label": "Antigravity", "sublabel": "User task", "row": 2, "col": 0 },
+    { "id": "hooks", "type": "frontend", "label": "Plugin and hooks", "sublabel": "Routing guidance", "row": 2, "col": 1 },
+    { "id": "router", "type": "backend", "label": "AI Factory Router", "sublabel": "Select, run, report", "row": 2, "col": 2 },
+    { "id": "policy", "type": "security", "label": "Model policy", "sublabel": "Allowlist and cost", "row": 0, "col": 2 },
+    { "id": "registry", "type": "database", "label": "Local state", "sublabel": "Sessions and health", "row": 4, "col": 2 },
+    { "id": "puter", "type": "backend", "label": "Puter bridge", "sublabel": "dsh + local service", "row": 0, "col": 4 },
+    { "id": "muse", "type": "external", "label": "Muse CLI", "sublabel": "Contributor model", "row": 1, "col": 4 },
+    { "id": "codex", "type": "external", "label": "Codex CLI", "sublabel": "Configured account", "row": 2, "col": 4 },
+    { "id": "opencode", "type": "external", "label": "OpenCode CLI", "sublabel": "Allowed free models", "row": 3, "col": 4 },
+    { "id": "claude", "type": "external", "label": "Claude Code CLI", "sublabel": "Allowed models", "row": 4, "col": 4 },
+    { "id": "gemini", "type": "frontend", "label": "Gemini handoff", "sublabel": "Parent agent continues", "row": 4, "col": 0 }
   ],
   "boundaries": [
-    { "kind": "region", "label": "Yerel AI Factory", "wraps": ["hooks", "router", "policy", "registry", "puter"], "pad": 16 }
+    { "kind": "region", "label": "Local AI Factory", "wraps": ["hooks", "router", "policy", "registry", "puter"], "pad": 16 }
   ],
   "connections": [
-    { "from": "host", "to": "hooks", "label": "görev", "variant": "emphasis" },
-    { "from": "hooks", "to": "router", "label": "CLI çağrısı", "variant": "emphasis" },
-    { "from": "policy", "to": "router", "label": "model listesi", "labelAt": [574, 132], "variant": "security" },
-    { "from": "router", "to": "registry", "label": "oturum ve sağlık", "labelAt": [574, 376] },
-    { "from": "router", "to": "puter", "label": "varsayılan", "labelAt": [904, 88], "variant": "emphasis" },
-    { "from": "router", "to": "muse", "label": "yedek", "labelAt": [904, 210] },
-    { "from": "router", "to": "codex", "label": "yedek / isteğe bağlı", "labelAt": [904, 332] },
-    { "from": "router", "to": "opencode", "label": "ücretsiz seçim", "labelAt": [904, 454] },
-    { "from": "router", "to": "claude", "label": "ücretli seçim", "labelAt": [904, 576], "variant": "security" },
-    { "from": "router", "to": "gemini", "label": "son devir", "variant": "dashed" }
+    { "from": "host", "to": "hooks", "label": "task", "variant": "emphasis" },
+    { "from": "hooks", "to": "router", "label": "CLI call", "variant": "emphasis" },
+    { "from": "policy", "to": "router", "label": "model allowlist", "labelAt": [574, 132], "variant": "security" },
+    { "from": "router", "to": "registry", "label": "sessions and health", "labelAt": [574, 376] },
+    { "from": "router", "to": "puter", "label": "default", "labelAt": [904, 88], "variant": "emphasis" },
+    { "from": "router", "to": "muse", "label": "fallback", "labelAt": [904, 210] },
+    { "from": "router", "to": "codex", "label": "fallback / explicit", "labelAt": [904, 332] },
+    { "from": "router", "to": "opencode", "label": "free selection", "labelAt": [904, 454] },
+    { "from": "router", "to": "claude", "label": "paid selection", "labelAt": [904, 576], "variant": "security" },
+    { "from": "router", "to": "gemini", "label": "final handoff", "variant": "dashed" }
   ],
   "cards": [
-    { "dot": "cyan", "title": "Seçim", "items": ["Rutin görev Puter ile başlar", "OpenCode ve Claude doğrudan seçilebilir"] },
-    { "dot": "rose", "title": "Güvenlik sınırı", "items": ["OpenCode: kayıtlı ücretsiz modeller", "Claude: Haiku/Sonnet maliyet tavanı"] },
-    { "dot": "emerald", "title": "Teslim", "items": ["Denemeler execution report içinde görünür", "Gemini devri görevin tamamlandığı anlamına gelmez"] }
+    { "dot": "cyan", "title": "Selection", "items": ["Routine tasks start with Puter", "OpenCode and Claude can be selected explicitly"] },
+    { "dot": "rose", "title": "Model guardrails", "items": ["OpenCode: configured free models", "Claude: Haiku/Sonnet + explicit Opus 5.5"] },
+    { "dot": "emerald", "title": "Handoff", "items": ["Attempts appear in the execution report", "A Gemini handoff does not mean the task is complete"] }
   ]
 }

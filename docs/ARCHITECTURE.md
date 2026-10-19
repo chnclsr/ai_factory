@@ -22,4 +22,4 @@ The per-engine health gate checks cached quota and circuit-breaker state before 
 
 Every completed router invocation prints an `[AI FACTORY EXECUTION REPORT]` with `path`, `choices`, `errors`, and `succeed_with`. `path` starts with `gemini` as the caller label and includes only engines attempted **inside that invocation**. It cannot reconstruct earlier independent router calls. `[OK]` on a Gemini handoff means delegation occurred; the parent agent must still complete and verify the task. Callers should quote the report rather than infer success from a model's prose.
 
-The interactive HTML diagrams are self-contained. Their editable sources are the adjacent JSON files, validated with Archify's showcase profile. Diagram copy is Turkish; fixed viewer controls and the HTML language fallback are English because the current viewer has no Turkish locale.
+The interactive HTML diagrams are self-contained. Their editable sources are the adjacent JSON files, validated with Archify's showcase profile. Diagram text, guided views, and viewer controls are in English.

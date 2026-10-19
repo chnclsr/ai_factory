@@ -2,42 +2,43 @@
   "schema_version": 2,
   "diagram_type": "workflow",
   "meta": {
-    "title": "AI Factory yönlendirme akışı",
+    "title": "AI Factory routing flow",
     "quality_profile": "showcase",
+    "locale": "en",
     "animation": "none",
     "views": [
-      { "id": "secim", "label": "Motor seçimi", "focus": ["task", "select", "allowlist"], "note": "Görev ya açık motorla ya da kurallarla yönlendirilir." },
-      { "id": "calistirma", "label": "Çalıştırma ve sonuç", "focus": ["gate", "execute", "report"], "note": "Sağlık kapısı ve CLI çıktısı gerçek sonucu belirler." },
-      { "id": "devretme", "label": "Başarısızlık ve devir", "focus": ["execute", "fallback", "report"], "note": "Yedek zinciri motora göre değişir; Gemini devri raporda görünür." }
+      { "id": "secim", "label": "Engine selection", "focus": ["task", "select", "allowlist"], "note": "Tasks use an explicitly selected engine or the routing rules." },
+      { "id": "calistirma", "label": "Execution and result", "focus": ["gate", "execute", "report"], "note": "Health checks and CLI output determine the reported outcome." },
+      { "id": "devretme", "label": "Failure and handoff", "focus": ["execute", "fallback", "report"], "note": "Fallback order depends on the engine; Gemini handoffs appear in the report." }
     ]
   },
   "lanes": [
-    { "id": "main", "label": "Seçim, çalıştırma ve rapor" },
-    { "id": "branch", "label": "Oturum ve yedek", "variant": "exception" }
+    { "id": "main", "label": "Select, execute, report" },
+    { "id": "branch", "label": "Session and fallback", "variant": "exception" }
   ],
   "mainPath": ["task", "select", "allowlist", "gate", "execute", "report"],
   "nodes": [
-    { "id": "task", "lane": "main", "col": 0, "type": "frontend", "label": "Görev", "sublabel": "--task / --resume" },
-    { "id": "select", "lane": "main", "col": 1, "type": "backend", "label": "Motor seç", "sublabel": "İstek / kural" },
-    { "id": "allowlist", "lane": "main", "col": 2, "type": "security", "label": "Modeli doğrula", "sublabel": "İzin listesi" },
-    { "id": "gate", "lane": "main", "col": 3, "type": "security", "label": "Sağlık kapısı", "sublabel": "Kota / karantina" },
-    { "id": "execute", "lane": "main", "col": 4, "type": "backend", "label": "CLI çalıştır", "sublabel": "Yanıt + session ID" },
-    { "id": "report", "lane": "main", "col": 5, "type": "frontend", "label": "Çalışma raporu", "sublabel": "path + succeed_with" },
-    { "id": "fallback", "lane": "branch", "col": 3, "type": "messagebus", "label": "Yedek / Gemini", "sublabel": "Motora göre zincir" }
+    { "id": "task", "lane": "main", "col": 0, "type": "frontend", "label": "Task", "sublabel": "--task / --resume" },
+    { "id": "select", "lane": "main", "col": 1, "type": "backend", "label": "Select engine", "sublabel": "Request / rules" },
+    { "id": "allowlist", "lane": "main", "col": 2, "type": "security", "label": "Validate model", "sublabel": "Allowlist" },
+    { "id": "gate", "lane": "main", "col": 3, "type": "security", "label": "Health check", "sublabel": "Quota / quarantine" },
+    { "id": "execute", "lane": "main", "col": 4, "type": "backend", "label": "Run CLI", "sublabel": "Response + session ID" },
+    { "id": "report", "lane": "main", "col": 5, "type": "frontend", "label": "Execution report", "sublabel": "path + succeed_with", "width": 164 },
+    { "id": "fallback", "lane": "branch", "col": 3, "type": "messagebus", "label": "Fallback / Gemini", "sublabel": "Engine-specific order", "width": 164 }
   ],
   "edges": [
     { "from": "task", "to": "select", "variant": "emphasis" },
     { "from": "select", "to": "allowlist", "variant": "security" },
     { "from": "allowlist", "to": "gate", "variant": "security" },
-    { "from": "gate", "to": "execute", "label": "izinli", "variant": "emphasis" },
-    { "from": "execute", "to": "report", "label": "yanıt var", "variant": "emphasis" },
-    { "from": "gate", "to": "fallback", "label": "karantina", "variant": "security", "role": "error" },
-    { "from": "execute", "to": "fallback", "label": "uygun hata", "variant": "security", "role": "error" },
-    { "from": "fallback", "to": "report", "label": "son durum", "variant": "dashed" }
+    { "from": "gate", "to": "execute", "label": "allowed", "variant": "emphasis" },
+    { "from": "execute", "to": "report", "label": "response", "variant": "emphasis" },
+    { "from": "gate", "to": "fallback", "label": "quarantined", "variant": "security", "role": "error" },
+    { "from": "execute", "to": "fallback", "label": "eligible error", "variant": "security", "role": "error" },
+    { "from": "fallback", "to": "report", "label": "final status", "variant": "dashed" }
   ],
   "cards": [
-    { "dot": "cyan", "title": "Başlangıç", "items": ["Varsayılan rota Puter Flash", "--resume kayıtlı oturumu kullanır"] },
-    { "dot": "rose", "title": "Sınırlar", "items": ["OpenCode ücretsiz; Claude izin listeli", "--no-fallback seçilen motorda durur"] },
-    { "dot": "emerald", "title": "Rapor", "items": ["path yalnızca o çağrının motorlarını gösterir", "Gemini devri işi üst ajana bırakır"] }
+    { "dot": "cyan", "title": "Starting point", "items": ["Default route: Puter Flash", "--resume uses the saved session"] },
+    { "dot": "rose", "title": "Guardrails", "items": ["OpenCode: free models; Claude: allowlisted", "--no-fallback stops after the selected engine"] },
+    { "dot": "emerald", "title": "Report", "items": ["path shows only engines from the current call", "A Gemini handoff returns work to the parent agent"] }
   ]
 }

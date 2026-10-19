@@ -33,7 +33,7 @@ OpenCode is restricted to the free models in [router_config.json](router_config.
 
 ![AI Factory routing flow](docs/diagrams/ai-factory-routing.visual-check.1440x900.light.png)
 
-The Antigravity plugin adds routing guidance; the local router selects a CLI, applies model and health checks, records sessions, and prints the result. A Gemini handoff means the parent agent must finish the task—it is not proof that the task is complete. The diagrams are authored in Turkish; their fixed viewer controls remain in English.
+The Antigravity plugin adds routing guidance; the local router selects a CLI, applies model and health checks, records sessions, and prints the result. A Gemini handoff means the parent agent must finish the task—it is not proof that the task is complete. Both diagrams and their interactive viewer controls are in English.
 GitHub shows the PNG previews above; download either HTML file and open it locally for search, focus views, and theme switching.
 
 ---
