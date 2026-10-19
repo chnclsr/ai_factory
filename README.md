@@ -25,6 +25,53 @@ OpenCode is restricted to the free models in [router_config.json](router_config.
 | Execution report | `path` lists only engines attempted in **this** router call; `succeed_with` names the successful engine or Gemini handoff. |
 | Health checks | Configurable watchdog and circuit breaker detect stalled or quarantined engines. `--quota` checks Puter, Muse, Codex, and Antigravity, not OpenCode/Claude. |
 
+## Tools and Models
+
+`--engine` chooses the tool; `--model` chooses its model. The table shows the default when you select that tool without a model. With no tool selected, routing rules start routine tasks with Puter `flash` and select Puter `pro` for configured complexity keywords.
+
+| Tool (`--engine`) | CLI used | Default model | Model names accepted with `--model` |
+|---|---|---|---|
+| Puter (`puter`) | `dsh headless` through the local bridge | `flash` | `flash`, `pro`; see the Puter model note below |
+| Muse (`muse`) | `muse exec` | `muse-spark-1.3-contributor` | Fixed to `muse-spark-1.3-contributor`; contributor mode is always enabled |
+| Codex (`codex`) | `codex exec` | `gpt-6.1-sol` | `gpt-6-luna`, `gpt-5.6-luna`, `gpt-6.1-sol`, `gpt-6-sol`, `gpt-5.6-terra`, `gpt-5.6-sol`, `gpt-5.5`, `gpt-6-astra` |
+| OpenCode (`opencode`) | `opencode run` | `deepseek-v4.1-flash-free` | The 12 configured free models listed below |
+| Claude Code (`claude`) | `claude -p` | `haiku-5.5` | `haiku-5.5`, `haiku-4.5`, `sonnet-5`, `sonnet-5.5`, `opus-5.5` |
+| Gemini / Antigravity (`gemini`) | Returns control to the calling agent | The calling agent's current model | The router does not select a new model for this handoff |
+
+For example, to run Claude Opus 5.5 and stop if it fails:
+
+```bash
+node router.mjs --engine claude --model opus-5.5 --no-fallback --task "Review the architecture"
+```
+
+OpenCode and Claude also accept the full model IDs from [router_config.json](router_config.json), such as `opencode/mimo-v2.6-flash-free` or `claude-opus-5-5`. Claude Opus 5.5 is selected only when requested explicitly. Codex also forwards other model IDs to its CLI; your account must support them. Muse always uses its fixed contributor model, even if another model is requested.
+
+<details>
+<summary>All 12 configured OpenCode models</summary>
+
+Use any of these names with `--engine opencode --model <name>`:
+
+- `deepseek-v4.1-flash-free` (default)
+- `mimo-v2.6-flash-free`
+- `muse-spark-1.3-contributor-free`
+- `mimo-v2.5-free`
+- `nemotron-3-ultra-free`
+- `nemotron-3.5-lightning-free`
+- `longcat-2.5-preview-free`
+- `step-5-preview-free`
+- `exo-free`
+- `space-bunny-free`
+- `cat-jam-free`
+- `big-pickle`
+
+Paid OpenCode models are rejected by the router.
+
+</details>
+
+**Puter model selection:** `flash` uses the model already configured in DeepSeek Harness (`dsh`). `pro` applies the bundled [pro-patch.yml](pro-patch.yml), which selects `deepseek-reasoner`. The configuration also lists `r1`, but the launcher has no separate R1 override: `--model r1` follows the default `dsh` path and does not guarantee an R1 request.
+
+These are the router's configured choices. Availability, quota, and charges depend on your provider account. See [Usage](#usage) for examples for each tool.
+
 ## Architecture
 
 [Interactive system diagram HTML](docs/diagrams/ai-factory-architecture.html) · [Interactive routing flow HTML](docs/diagrams/ai-factory-routing.html) · [Architecture notes](docs/ARCHITECTURE.md)
@@ -86,7 +133,9 @@ ai_factory/
 | Antigravity integration | Antigravity CLI (`agy`) or Antigravity IDE |
 | OpenCode tasks | OpenCode CLI installed and signed in to a provider with the selected free model |
 | Claude tasks | Claude Code CLI installed and signed in; your account may incur charges |
-| Puter, Muse, Codex tasks | The corresponding CLI/service configured on this computer |
+| Puter tasks | DeepSeek Harness (`dsh`) installed and configured, plus an authenticated local Puter bridge: start it with `npm start`, then open `http://127.0.0.1:8080` to sign in |
+| Muse tasks | Muse CLI (`muse`) installed and signed in with access to `muse-spark-1.3-contributor` |
+| Codex tasks | Codex CLI (`codex`) installed and signed in with access to the requested model |
 
 | Install step | Command | Result |
 |---|---|---|
@@ -132,6 +181,7 @@ This distributes the skill specification (`SKILL.md`) to all existing host catal
 - `~/.gemini/antigravity-ide/builtin/skills/ai_factory/SKILL.md` (Antigravity IDE)
 
 When executed, existing files are automatically backed up with a timestamp suffix before being updated.
+Plugin backups are stored in `~/.gemini/config/plugin-backups/`, outside the active plugin directory. Older installs may have `ai-factory.backup-*` folders inside `~/.gemini/config/plugins/`; move those folders to `plugin-backups/` so Antigravity cannot load their old rules as extra plugins. Start a new Antigravity session after updating the plugin.
 
 ---
 
@@ -142,7 +192,7 @@ When executed, existing files are automatically backed up with a timestamp suffi
 node router.mjs --task "Analyze the repository structure and summarize dependencies"
 ```
 
-### Deep Reasoning Mode (0$ Puter Pro / R1)
+### Deep Reasoning Mode (Puter Pro)
 ```bash
 node router.mjs --engine puter --model pro --task "Optimize algorithmic complexity for the core pipeline"
 ```

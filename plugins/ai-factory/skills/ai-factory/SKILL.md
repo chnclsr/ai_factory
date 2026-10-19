@@ -20,6 +20,7 @@ Options:
 - --no-fallback: stop after the selected engine fails.
 
 Read rules/ai_factory_router.md in this plugin for the complete policy.
+For an explicit Opus 5.5 request, run {{ROUTER_COMMAND}} --engine claude --model opus-5.5 --no-fallback --task "<request>" --cwd "<working directory>". Use current router_config.json for model names, not `claude models` or remembered restrictions.
 Do not route recursively when AI_FACTORY_ROUTER_DEPTH is greater than zero.
 A Gemini handoff requires the parent agent to finish the task.
 Copy execution status only from the actual router report; do not invent success.

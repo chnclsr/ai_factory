@@ -20,7 +20,7 @@ process.stdin.on('end', () => {
     const installation = fs.existsSync(installFile)
       ? JSON.parse(fs.readFileSync(installFile, 'utf8'))
       : { node: process.execPath, router: path.resolve(__dirname, '../../..', 'router.mjs') };
-    const command = JSON.stringify(installation.node) + ' ' + JSON.stringify(installation.router);
+    const command = (process.platform === 'win32' ? '& ' : '') + JSON.stringify(installation.node) + ' ' + JSON.stringify(installation.router);
     if (payload.toolCall) {
       const name = payload.toolCall.name;
       const args = payload.toolCall.args || {};
