@@ -20,6 +20,7 @@ import { spawn, execSync } from 'child_process';
 import crypto from 'crypto';
 import { fetchAllQuotas, formatQuotaTable, checkEngineQuotaGate } from './quota_tracker.mjs';
 import { ROOT, CONFIG_FILE, BRIDGE_URL, stateFile } from '../lib/paths.mjs';
+import { decideWatchdogAction, sampleTreeCpuMs } from './watchdog.mjs';
 
 const __dirname = ROOT;
 const REGISTRY_FILE = stateFile('session_registry.json');
@@ -191,9 +192,9 @@ function classifyError(exitCode, outputText, resMeta = {}) {
       kind: 'watchdog_timeout',
       fallbackEligible: true,
       quarantine: true,
-      reason: resMeta.initialHang
+      reason: resMeta.watchdogReason || (resMeta.initialHang
         ? '30 saniyelik ilk \u00e7\u0131kt\u0131 zaman a\u015f\u0131m\u0131 (H\u0131zl\u0131 Ba\u015flang\u0131\u00e7 Bek\u00e7isi)'
-        : 'Sessizlik zaman a\u015f\u0131m\u0131 (Watchdog Timeout)'
+        : 'Sessizlik zaman a\u015f\u0131m\u0131 (Watchdog Timeout)')
     };
   }
 
@@ -273,6 +274,8 @@ async function runCommand(cmdString, cwd, engineName, config) {
   const initialTimeoutMs = config?.watchdog?.initial_timeout_ms || 30000; // \u0130lk 30s hi\u00e7 \u00e7\u0131kt\u0131 gelmezse kilitlenme say\u0131l\u0131r
   const idleTimeoutMs = config?.watchdog?.idle_timeout_ms || 120000; // \u00c7\u0131kt\u0131 sonras\u0131 120s sessizlik zaman a\u015f\u0131m\u0131
   const checkIntervalMs = config?.watchdog?.check_interval_ms || 5000;
+  const maxExecutionMs = config?.watchdog?.max_execution_time_ms || 600000;
+  const cpuStillLimitMs = config?.watchdog?.cpu_still_limit_ms || idleTimeoutMs;
   const startTime = Date.now();
   let hasReceivedAnyOutput = false;
   let sessionId = null;
@@ -318,10 +321,15 @@ async function runCommand(cmdString, cwd, engineName, config) {
     let lastActivityAt = Date.now();
     let tailBuffer = [];
     let isFinished = false;
+    let previousCpuMs = null;
+    let lastCpuProgressAt = Date.now();
+    let lastWatchdogNoticeAt = 0;
 
     function handleData(chunk, streamName) {
       hasReceivedAnyOutput = true;
       lastActivityAt = Date.now();
+      previousCpuMs = null;
+      lastCpuProgressAt = lastActivityAt;
       const str = chunk.toString('utf8');
       if (streamName === 'stdout' && (engineName === 'opencode' || engineName === 'claude')) {
         jsonRemainder += str;
@@ -346,76 +354,42 @@ async function runCommand(cmdString, cwd, engineName, config) {
     if (child.stdout) child.stdout.on('data', d => handleData(d, 'stdout'));
     if (child.stderr) child.stderr.on('data', d => handleData(d, 'stderr'));
 
-    // Kademeli Liveness / Watchdog Bek\u00e7isi (\u0130lk 30s -> Sonra 120s)
+    function finishWatchdog(reason) {
+      clearInterval(watchdogInterval);
+      isFinished = true;
+      console.warn('\n[AI-FACTORY-WATCHDOG] ' + engineName + ': ' + reason +
+        '; elapsed=' + (Date.now() - startTime) + 'ms, idle=' + (Date.now() - lastActivityAt) + 'ms. Terminating process tree.');
+      killProcessTree(child.pid);
+      resolve({ exitCode: 42, signal: 'SIGKILL', watchdogTimeout: true,
+        watchdogReason: reason, initialHang: !hasReceivedAnyOutput, output: tailBuffer.join('\n') });
+    }
+
     const watchdogInterval = setInterval(() => {
       if (isFinished) return;
-      const now = Date.now();
-      const elapsedSinceStart = now - startTime;
-      const idleMs = now - lastActivityAt;
+      let now = Date.now();
+      // The hard deadline applies even when the engine keeps emitting output.
+      if (now - startTime >= maxExecutionMs) { finishWatchdog('hard_timeout'); return; }
+      const thresholdMs = hasReceivedAnyOutput ? idleTimeoutMs : initialTimeoutMs;
+      if (now - lastActivityAt < thresholdMs) return;
 
-      // 1. Aşama: İlk 30 saniye içinde hiç çıktı gelmediyse (Erken Kilitlenme / Sessiz Hata)
-      if (!hasReceivedAnyOutput && elapsedSinceStart >= initialTimeoutMs) {
-        let isAlive = false;
-        try {
-          if (child.pid) {
-            isAlive = process.kill(child.pid, 0);
-          }
-        } catch (e) {
-          isAlive = false;
-        }
-
-        // Derin modeller (codex/puter/muse) düşünürken hayattaysa ek süre tanı
-        if (isAlive && elapsedSinceStart < (initialTimeoutMs * 3)) {
-          return;
-        }
-
-        clearInterval(watchdogInterval);
-        isFinished = true;
-        console.warn(`\n[AI-FACTORY-WATCHDOG] \u26a0\ufe0f UYARI: "${engineName}" motoru ilk ${Math.round(elapsedSinceStart / 1000)}s boyunca hi\u00e7 \u00e7\u0131kt\u0131 \u00fcretmedi!`);
-        console.warn(`[AI-FACTORY-WATCHDOG] Olas\u0131 ba\u015flang\u0131\u00e7 kilitlenmesi/sessizlik nedeniyle s\u00fcre\u00e7 sonland\u0131r\u0131l\u0131yor ve s\u0131radaki motora devrediliyor...\n`);
-        killProcessTree(child.pid);
-        resolve({
-          exitCode: 42,
-          signal: 'SIGKILL',
-          watchdogTimeout: true,
-          initialHang: true,
-          output: tailBuffer.join('\n') || `[Watchdog] "${engineName}" ilk ${Math.round(elapsedSinceStart / 1000)}s i\u00e7inde hi\u00e7 \u00e7\u0131kt\u0131 vermedi.`
-        });
-        return;
-      }
-
-      // 2. Aşama: Çıktı geldikten sonra sessizlik zaman aşımı (Process Liveness ile korumalı)
-      const maxExecutionTimeMs = config?.watchdog?.max_execution_time_ms || 600000; // 10 dk mutlak tavan süre
-      if (idleMs >= idleTimeoutMs) {
-        let isAlive = false;
-        try {
-          if (child.pid) {
-            isAlive = process.kill(child.pid, 0);
-          }
-        } catch (e) {
-          isAlive = false;
-        }
-
-        // Süreç hala hayattaysa ve azami çalışma süresi aşılmadıysa öldürmeyi ertele
-        if (isAlive && elapsedSinceStart < maxExecutionTimeMs) {
-          // Canlı motora nefes payı tanı, gereksiz öldürmeyi engelle
-          lastActivityAt = now - (idleTimeoutMs - 30000); // 30s sonra tekrar kontrol et
-          return;
-        }
-
-        clearInterval(watchdogInterval);
-        isFinished = true;
-        console.warn(`\n[AI-FACTORY-WATCHDOG] \u26a0\ufe0f UYARI: "${engineName}" motoru ${Math.round(idleMs / 1000)}s boyunca hi\u00e7 \u00e7\u0131kt\u0131 \u00fcretmedi ve s\u00fcre\u00e7 sonland\u0131r\u0131l\u0131yor!`);
-        console.warn(`[AI-FACTORY-WATCHDOG] Olas\u0131 kilitlenme/sessizlik nedeniyle s\u00fcre\u00e7 sonland\u0131r\u0131l\u0131yor ve s\u0131radaki motora devrediliyor...\n`);
-        killProcessTree(child.pid);
-        resolve({
-          exitCode: 42,
-          signal: 'SIGKILL',
-          watchdogTimeout: true,
-          initialHang: false,
-          output: tailBuffer.join('\n')
-        });
-        return;
+      const sample = sampleTreeCpuMs(child.pid);
+      now = Date.now();
+      const cpuKnown = sample.cpuMs !== null;
+      const cpuAdvanced = cpuKnown && (previousCpuMs === null || sample.cpuMs !== previousCpuMs);
+      // A new sample or changing process tree starts a fresh observation window.
+      if (!cpuKnown || cpuAdvanced) lastCpuProgressAt = now;
+      previousCpuMs = sample.cpuMs;
+      const decision = decideWatchdogAction({
+        elapsedMs: now - startTime, idleMs: now - lastActivityAt, thresholdMs,
+        maxExecutionMs, treeAlive: sample.alive, cpuKnown, cpuAdvanced,
+        cpuStillMs: now - lastCpuProgressAt, cpuStillLimitMs
+      });
+      if (decision.action === 'kill') { finishWatchdog(decision.reason); return; }
+      if (decision.action === 'postpone' && now - lastWatchdogNoticeAt >= 30000) {
+        lastWatchdogNoticeAt = now;
+        console.warn('[AI-FACTORY-WATCHDOG] ' + engineName + ': checking silent process; CPU ' +
+          (cpuKnown ? (cpuAdvanced ? 'progressing' : 'unchanged') : 'unavailable') +
+          ', hard deadline in ' + Math.max(0, Math.ceil((maxExecutionMs - (now - startTime)) / 1000)) + 's.');
       }
     }, checkIntervalMs);
 

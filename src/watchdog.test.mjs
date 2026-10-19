@@ -6,9 +6,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   decideWatchdogAction,
+  collectProcessTreePids,
   isPidAlive,
   isProcessTreeAlive
 } from './watchdog.mjs';
+
+test('CPU sampling includes grandchildren behind shell and CLI wrappers', () => {
+  const rows = [{ ProcessId: 3, ParentProcessId: 2 }, { ProcessId: 2, ParentProcessId: 1 },
+    { ProcessId: 4, ParentProcessId: 3 }, { ProcessId: 9, ParentProcessId: 8 }];
+  assert.deepEqual(collectProcessTreePids(1, rows).sort(), [1, 2, 3, 4]);
+});
 
 function base(overrides = {}) {
   return {

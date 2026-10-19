@@ -20,10 +20,13 @@ OpenCode is restricted to the free models in [router_config.json](router_config.
 |---|---|
 | Smart routing | Starts routine tasks with Puter Flash; explicit requests can select OpenCode, Claude, Muse, or Codex. |
 | Model guardrails | Rejects paid OpenCode IDs and unlisted Claude models; Opus 5.5 requires an explicit request. |
+| Claude delegation check | The Antigravity hook rejects direct headless Claude launches from terminal tools and directs the agent to the router; help and authentication checks remain available. |
 | Engine-specific fallback | Puter, Muse, and Codex have their own fallback order; OpenCode/Claude hand back to Gemini rather than trying another paid engine. |
 | Named sessions | `--name` stores a session; `--resume` continues it when the CLI supplied an ID. |
 | Execution report | `path` lists only engines attempted in **this** router call; `succeed_with` names the successful engine or Gemini handoff. |
 | Health checks | Configurable watchdog and circuit breaker detect stalled or quarantined engines. `--quota` checks Puter, Muse, Codex, and Antigravity, not OpenCode/Claude. |
+
+The task watchdog starts with each router call. After 30 seconds without initial output, or 120 seconds of later silence, it checks the engine and its child processes. If their CPU use stays unchanged for another 120 seconds, it stops the task. Every task also has a 10-minute limit, even if output continues; if CPU information is unavailable, that limit still applies. Adjust these limits in `router_config.json`. This watchdog does not monitor Antigravity itself.
 
 ## Tools and Models
 
@@ -166,7 +169,7 @@ node deploy_skill.mjs
 ```
 Target directory:
 - `~/.gemini/config/plugins/ai-factory/`
-  - `plugin.json` and `hooks.json` (configured with dynamic absolute Node and hook paths)
+  - `plugin.json` and `hooks.json` (Windows hooks use a launcher that handles spaces in installation paths)
   - `hooks/hook_handler.js` (intercepts heavy context calls and delegates to router)
   - `rules/AGENTS.md` and `rules/GEMINI.md` (active system rules for Antigravity)
 

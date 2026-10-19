@@ -63,7 +63,7 @@ export function listChildPids(parentPid) {
 
 function queryWindowsCpuMs(pids) {
   const out = execQuiet(
-    `powershell -NoProfile -NonInteractive -Command "Get-Process -Id ${pids.join(',')} -ErrorAction SilentlyContinue | ForEach-Object { $_.TotalProcessorTime.TotalMilliseconds }"`
+    `powershell -NoProfile -NonInteractive -Command "Get-Process -Id ${pids.join(',')} -ErrorAction SilentlyContinue | ForEach-Object { $_.TotalProcessorTime.TotalMilliseconds.ToString([Globalization.CultureInfo]::InvariantCulture) }"`
   );
   if (out == null) return null;
   let sum = 0;
@@ -106,13 +106,35 @@ function queryPosixCpuMs(pids) {
  * Kök PID + canlı alt süreçlerin toplam CPU süresini örnekler.
  * Dönüş: { alive, cpuMs } — cpuMs örneklenemezse null olur.
  */
+export function collectProcessTreePids(rootPid, rows) {
+  const pids = new Set([rootPid]);
+  let previousSize;
+  do {
+    previousSize = pids.size;
+    for (const row of rows) {
+      if (pids.has(row.ParentProcessId) && Number.isInteger(row.ProcessId) && row.ProcessId > 0) pids.add(row.ProcessId);
+    }
+  } while (pids.size !== previousSize);
+  return [...pids];
+}
+
 export function sampleTreeCpuMs(rootPid) {
   if (!Number.isInteger(rootPid) || rootPid <= 0) return { alive: false, cpuMs: null };
   let tree;
   try {
-    tree = [rootPid, ...listChildPids(rootPid)];
+    // Shell -> CLI launcher -> model binary can span several generations.
+    const snapshot = execQuiet(process.platform === 'win32'
+      ? 'powershell -NoProfile -NonInteractive -Command "Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId | ConvertTo-Json -Compress"'
+      : 'ps -eo pid=,ppid=');
+    if (!snapshot) return { alive: isPidAlive(rootPid), cpuMs: null };
+    const rows = process.platform === 'win32' ? [].concat(JSON.parse(snapshot))
+      : snapshot.trim().split('\n').map(line => {
+        const [ProcessId, ParentProcessId] = line.trim().split(/\s+/).map(Number);
+        return { ProcessId, ParentProcessId };
+      });
+    tree = collectProcessTreePids(rootPid, rows);
   } catch (e) {
-    tree = [rootPid];
+    return { alive: isPidAlive(rootPid), cpuMs: null };
   }
   const alivePids = tree.filter(isPidAlive);
   if (alivePids.length === 0) return { alive: false, cpuMs: null };

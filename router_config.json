@@ -145,8 +145,10 @@
     "initial_timeout_ms": 30000,
     "idle_timeout_ms": 120000,
     "heavy_idle_timeout_ms": 240000,
+    "cpu_still_limit_ms": 120000,
+    "max_execution_time_ms": 600000,
     "check_interval_ms": 5000,
-    "description": "Kademeli bekçi: İlk 30s hiç çıktı yoksa hızlı müdahale, çıktı sonrası 120s-240s sessizlik zaman aşımı."
+    "description": "İlk 30s veya çıktı sonrası 120s sessizlikte süreç ağacı incelenir. CPU 120s ilerlemezse görev sonlandırılır; 10 dakikalık toplam tavan çıktıdan bağımsız uygulanır."
   },
   "circuit_breaker": {
     "quarantine_base_ms": 45000,

@@ -1,6 +1,23 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
+function isDirectClaudePrint(script) {
+  if (typeof script !== 'string') return false;
+  let command = script.trim();
+  for (let depth = 0; depth < 3; depth++) {
+    command = command.replace(/^&\s*/, '');
+    const wrapper = command.match(/^(?:cmd(?:\.exe)?\s+(?:\/[ds]\s+)*\/[ck]|(?:powershell|pwsh)(?:\.exe)?\s+(?:(?:-NoProfile|-NonInteractive)\s+)*-(?:Command|c))\s+/i);
+    if (!wrapper) break;
+    command = command.slice(wrapper[0].length).trim();
+    const quoted = command.match(/^(['"])([\s\S]*)\1$/);
+    if (quoted) command = quoted[2];
+  }
+  const invocation = command.match(/^(?:"([^"]+)"|'([^']+)'|(\S+))\s+([\s\S]*)$/);
+  if (!invocation) return false;
+  const executable = path.posix.basename((invocation[1] || invocation[2] || invocation[3]).replaceAll('\\', '/'));
+  return /^claude(?:\.(?:cmd|exe|ps1))?$/i.test(executable) && /(?:^|\s)(?:-p|--print)(?=\s|=|$)/.test(invocation[4]);
+}
+
 let input = '';
 process.stdin.setEncoding('utf8');
 process.stdin.on('error', () => {});
@@ -24,6 +41,11 @@ process.stdin.on('end', () => {
     if (payload.toolCall) {
       const name = payload.toolCall.name;
       const args = payload.toolCall.args || {};
+      if (['run_command', 'execute_command', 'run_terminal_command'].includes(name) &&
+        isDirectClaudePrint(args.CommandLine || args.command || args.cmd)) {
+        console.log(JSON.stringify({ decision: 'deny', reason: 'Delegate Claude work through AI Factory: ' + command + ' --engine claude --model <requested-model> --no-fallback --task <request> --cwd <working-directory>. For a task file, read its contents and pass them with --task; do not invoke claude -p directly.' }));
+        return;
+      }
       let repository = false;
       try {
         const hostname = new URL(String(args.Url || args.url || '')).hostname.toLowerCase();
