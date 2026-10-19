@@ -353,8 +353,22 @@ async function runCommand(cmdString, cwd, engineName, config) {
       const elapsedSinceStart = now - startTime;
       const idleMs = now - lastActivityAt;
 
-      // 1. A\u015fama: \u0130lk 30 saniye i\u00e7inde hi\u00e7 \u00e7\u0131kt\u0131 gelmediyse (Erken Kilitlenme / Sessiz Hata)
+      // 1. Aşama: İlk 30 saniye içinde hiç çıktı gelmediyse (Erken Kilitlenme / Sessiz Hata)
       if (!hasReceivedAnyOutput && elapsedSinceStart >= initialTimeoutMs) {
+        let isAlive = false;
+        try {
+          if (child.pid) {
+            isAlive = process.kill(child.pid, 0);
+          }
+        } catch (e) {
+          isAlive = false;
+        }
+
+        // Derin modeller (codex/puter/muse) düşünürken hayattaysa ek süre tanı
+        if (isAlive && elapsedSinceStart < (initialTimeoutMs * 3)) {
+          return;
+        }
+
         clearInterval(watchdogInterval);
         isFinished = true;
         console.warn(`\n[AI-FACTORY-WATCHDOG] \u26a0\ufe0f UYARI: "${engineName}" motoru ilk ${Math.round(elapsedSinceStart / 1000)}s boyunca hi\u00e7 \u00e7\u0131kt\u0131 \u00fcretmedi!`);
@@ -370,11 +384,28 @@ async function runCommand(cmdString, cwd, engineName, config) {
         return;
       }
 
-      // 2. A\u015fama: \u00c7\u0131kt\u0131 geldikten sonra sessizlik zaman a\u015f\u0131m\u0131 (120 saniye)
+      // 2. Aşama: Çıktı geldikten sonra sessizlik zaman aşımı (Process Liveness ile korumalı)
+      const maxExecutionTimeMs = config?.watchdog?.max_execution_time_ms || 600000; // 10 dk mutlak tavan süre
       if (idleMs >= idleTimeoutMs) {
+        let isAlive = false;
+        try {
+          if (child.pid) {
+            isAlive = process.kill(child.pid, 0);
+          }
+        } catch (e) {
+          isAlive = false;
+        }
+
+        // Süreç hala hayattaysa ve azami çalışma süresi aşılmadıysa öldürmeyi ertele
+        if (isAlive && elapsedSinceStart < maxExecutionTimeMs) {
+          // Canlı motora nefes payı tanı, gereksiz öldürmeyi engelle
+          lastActivityAt = now - (idleTimeoutMs - 30000); // 30s sonra tekrar kontrol et
+          return;
+        }
+
         clearInterval(watchdogInterval);
         isFinished = true;
-        console.warn(`\n[AI-FACTORY-WATCHDOG] \u26a0\ufe0f UYARI: "${engineName}" motoru ${Math.round(idleMs / 1000)}s boyunca hi\u00e7 \u00e7\u0131kt\u0131 \u00fcretmedi!`);
+        console.warn(`\n[AI-FACTORY-WATCHDOG] \u26a0\ufe0f UYARI: "${engineName}" motoru ${Math.round(idleMs / 1000)}s boyunca hi\u00e7 \u00e7\u0131kt\u0131 \u00fcretmedi ve s\u00fcre\u00e7 sonland\u0131r\u0131l\u0131yor!`);
         console.warn(`[AI-FACTORY-WATCHDOG] Olas\u0131 kilitlenme/sessizlik nedeniyle s\u00fcre\u00e7 sonland\u0131r\u0131l\u0131yor ve s\u0131radaki motora devrediliyor...\n`);
         killProcessTree(child.pid);
         resolve({
