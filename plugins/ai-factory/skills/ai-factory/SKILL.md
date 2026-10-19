@@ -23,6 +23,7 @@ Read rules/ai_factory_router.md in this plugin for the complete policy.
 For an explicit Opus 5.5 request, run {{ROUTER_COMMAND}} --engine claude --model opus-5.5 --no-fallback --task "<request>" --cwd "<working directory>". Use current router_config.json for model names, not `claude models` or remembered restrictions.
 Claude delegation must use the router, including tasks stored in prompt files: read the file and pass its contents with --task. Do not invoke `claude -p` or `claude --print` directly from terminal tools; the router starts that child process itself.
 Do not route recursively when AI_FACTORY_ROUTER_DEPTH is greater than zero.
+For work expected to exceed 30 seconds, follow the AGY task-monitoring protocol in rules/ai_factory_router.md: launch asynchronously with `WaitMsBeforeAsync: 1000` (or 500), schedule checks at 30 (`TimerCondition=never`), 120, and 240 seconds, then every 120 seconds while active. Inspect task status/logs via `manage_task(status)` and cancel pending checks on completion.
 A Gemini handoff requires the parent agent to finish the task.
 Copy execution status only from the actual router report; do not invent success.
 

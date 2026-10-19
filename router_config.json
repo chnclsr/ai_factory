@@ -148,6 +148,8 @@
     "cpu_still_limit_ms": 120000,
     "max_execution_time_ms": 600000,
     "check_interval_ms": 5000,
+    "status_checkpoints_ms": [30000, 120000, 240000],
+    "status_repeat_ms": 120000,
     "description": "İlk 30s veya çıktı sonrası 120s sessizlikte süreç ağacı incelenir. CPU 120s ilerlemezse görev sonlandırılır; 10 dakikalık toplam tavan çıktıdan bağımsız uygulanır."
   },
   "circuit_breaker": {

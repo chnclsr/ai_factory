@@ -79,3 +79,14 @@ test('router lets a silent engine finish while its CPU is progressing', t => {
   assert.match(result.stdout, /MOCK_OK/);
   assert.doesNotMatch(result.stderr, /\[AI-FACTORY-WATCHDOG\].*(?:hard_timeout|zombie_tree)/);
 });
+
+test('router starts its watchdog and checks status while the engine is running', t => {
+  const result = runFixture(t, 'active', {
+    initial_timeout_ms: 1000, idle_timeout_ms: 1000,
+    status_checkpoints_ms: [50, 100, 150], status_repeat_ms: 50
+  });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stderr, /\[AI-FACTORY-WATCHDOG\] started: claude PID/);
+  assert.ok((result.stderr.match(/\[AI-FACTORY-WATCHDOG\] status: claude process_alive=true/g) || []).length >= 4,
+    result.stderr);
+});

@@ -276,6 +276,13 @@ async function runCommand(cmdString, cwd, engineName, config) {
   const checkIntervalMs = config?.watchdog?.check_interval_ms || 5000;
   const maxExecutionMs = config?.watchdog?.max_execution_time_ms || 600000;
   const cpuStillLimitMs = config?.watchdog?.cpu_still_limit_ms || idleTimeoutMs;
+  const configuredChecks = config?.watchdog?.status_checkpoints_ms;
+  const statusCheckpointsMs = Array.isArray(configuredChecks) && configuredChecks.length > 0 &&
+    configuredChecks.every((value, index) => Number.isInteger(value) && value > 0 &&
+      (index === 0 || value > configuredChecks[index - 1]))
+    ? configuredChecks : [30000, 120000, 240000];
+  const statusRepeatMs = Number.isInteger(config?.watchdog?.status_repeat_ms) &&
+    config.watchdog.status_repeat_ms > 0 ? config.watchdog.status_repeat_ms : 120000;
   const startTime = Date.now();
   let hasReceivedAnyOutput = false;
   let sessionId = null;
@@ -324,6 +331,12 @@ async function runCommand(cmdString, cwd, engineName, config) {
     let previousCpuMs = null;
     let lastCpuProgressAt = Date.now();
     let lastWatchdogNoticeAt = 0;
+    let statusCheckIndex = 0;
+    let nextStatusAt = statusCheckpointsMs[0];
+
+    console.warn('[AI-FACTORY-WATCHDOG] started: ' + engineName + ' PID ' + child.pid +
+      '; checks at ' + statusCheckpointsMs.map(ms => ms / 1000).join('/') +
+      's, then every ' + statusRepeatMs / 1000 + 's; hard limit ' + maxExecutionMs / 1000 + 's.');
 
     function handleData(chunk, streamName) {
       hasReceivedAnyOutput = true;
@@ -367,6 +380,17 @@ async function runCommand(cmdString, cwd, engineName, config) {
     const watchdogInterval = setInterval(() => {
       if (isFinished) return;
       let now = Date.now();
+      const elapsedMs = now - startTime;
+      if (elapsedMs >= nextStatusAt) {
+        let processAlive = false;
+        try { processAlive = !!child.pid && process.kill(child.pid, 0); } catch {}
+        console.warn('[AI-FACTORY-WATCHDOG] status: ' + engineName +
+          ' process_alive=' + processAlive + ', elapsed=' + Math.round(elapsedMs / 1000) +
+          's, idle=' + Math.round((now - lastActivityAt) / 1000) + 's.');
+        statusCheckIndex++;
+        nextStatusAt = statusCheckIndex < statusCheckpointsMs.length
+          ? statusCheckpointsMs[statusCheckIndex] : nextStatusAt + statusRepeatMs;
+      }
       // The hard deadline applies even when the engine keeps emitting output.
       if (now - startTime >= maxExecutionMs) { finishWatchdog('hard_timeout'); return; }
       const thresholdMs = hasReceivedAnyOutput ? idleTimeoutMs : initialTimeoutMs;
