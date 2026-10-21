@@ -2,22 +2,18 @@
   "name": "ai-factory",
   "version": "1.0.0",
   "private": true,
-  "description": "Local AI task router, Puter bridge, quota tracker and Gemini/Antigravity hooks",
+  "description": "Local AI task router, quota tracker and Gemini/Antigravity hooks",
   "type": "module",
   "engines": {
     "node": ">=22"
   },
   "scripts": {
     "setup": "node scripts/setup.mjs",
-    "start": "node server.mjs",
     "route": "node router.mjs",
     "quota": "node quota_tracker.mjs",
     "deploy": "node deploy_skill.mjs",
     "test": "node --test",
     "check": "node scripts/check.mjs"
-  },
-  "dependencies": {
-    "@heyputer/puter.js": "^2.6.4"
   }
 }
 

@@ -37,7 +37,7 @@
     { "from": "fallback", "to": "report", "label": "final status", "variant": "dashed" }
   ],
   "cards": [
-    { "dot": "cyan", "title": "Starting point", "items": ["Default route: Puter Flash", "--resume uses the saved session"] },
+    { "dot": "cyan", "title": "Starting point", "items": ["Default route: Muse Contributor", "--resume uses the saved session"] },
     { "dot": "rose", "title": "Guardrails", "items": ["OpenCode: free models; Claude: allowlisted", "--no-fallback stops after the selected engine"] },
     { "dot": "emerald", "title": "Report", "items": ["path shows only engines from the current call", "A Gemini handoff returns work to the parent agent"] }
   ]

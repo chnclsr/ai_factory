@@ -2,10 +2,9 @@
 /**
  * AI Factory - Unified Quota & Usage Tracker (v1.0)
  * Monit\u00f6rlenen Motorlar:
- * 1. Puter (0$ DeepSeek Allowance - https://api.puter.com/metering/usage)
- * 2. Codex (OpenAI RateLimits & Reset Credits via JSON-RPC 'account/rateLimits/read')
- * 3. Antigravity (Gemini & Claude/GPT 5h/Weekly quotas via 'agy -p /usage')
- * 4. Meta Muse (Subscription & Model status via JSON-RPC 'usage/read')
+ * 1. Codex (OpenAI RateLimits & Reset Credits via JSON-RPC 'account/rateLimits/read')
+ * 2. Antigravity (Gemini & Claude/GPT 5h/Weekly quotas via 'agy -p /usage')
+ * 3. Meta Muse (Subscription & Model status via JSON-RPC 'usage/read')
  */
 
 import fs from 'fs';
@@ -13,9 +12,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { spawn, execSync } from 'child_process';
 
-import { stateFile, TOKEN_FILE } from '../lib/paths.mjs';
+import { stateFile } from '../lib/paths.mjs';
 export const QUOTA_FILE = stateFile('quota_registry.json');
-export const PUTER_TOKEN_FILE = TOKEN_FILE;
 
 const DEFAULT_TTL_MS = 5 * 60 * 1000; // 5 dakika \u00f6nbellek
 
@@ -177,41 +175,7 @@ export async function queryCodexQuota(timeoutMs = 25000) {
   }
 }
 
-// 2. Puter Kotas\u0131
-export async function queryPuterQuota(timeoutMs = 20000) {
-  if (!process.env.PUTER_TOKEN && !fs.existsSync(PUTER_TOKEN_FILE)) {
-    return { status: 'error', error: 'Puter token dosyas\u0131 bulunamad\u0131' };
-  }
-  const token = process.env.PUTER_TOKEN || fs.readFileSync(PUTER_TOKEN_FILE, 'utf8').trim();
-  if (!token) return { status: 'error', error: 'Puter token bo\u015f' };
-
-  try {
-    const res = await fetch('https://api.puter.com/metering/usage', {
-      headers: { Authorization: 'Bearer ' + token },
-      signal: AbortSignal.timeout(timeoutMs)
-    });
-    if (!res.ok) throw new Error('Puter HTTP ' + res.status);
-    const body = await res.json();
-    const info = body.allowanceInfo;
-    const remainingPercent = info && info.monthUsageAllowance > 0
-      ? Math.round((100 * info.remaining / info.monthUsageAllowance) * 100) / 100
-      : null;
-
-    return {
-      status: 'ok',
-      httpStatus: res.status,
-      remaining: info ? info.remaining : null,
-      monthAllowance: info ? info.monthUsageAllowance : null,
-      unit: info ? info.unit : 'credits',
-      remainingPercent,
-      observedAt: new Date().toISOString()
-    };
-  } catch (err) {
-    return { status: 'error', error: err.message, observedAt: new Date().toISOString() };
-  }
-}
-
-// 3. Antigravity Kotas\u0131
+// 2. Antigravity Kotas\u0131
 export function queryAntigravityQuota(timeoutMs = 25000) {
   return new Promise(resolve => {
     const agyExe = findAgyExe();
@@ -255,7 +219,7 @@ export function queryAntigravityQuota(timeoutMs = 25000) {
   });
 }
 
-// 4. Meta Muse Kotas\u0131
+// 3. Meta Muse Kotas\u0131
 export async function queryMuseQuota(timeoutMs = 20000) {
   const museExe = findMuseExe();
   if (!museExe) return { status: 'error', error: 'Muse y\u00fcr\u00fct\u00fcc\u00fcs\u00fc bulunamad\u0131' };
@@ -286,9 +250,8 @@ export async function fetchAllQuotas({ force = false, timeoutMs = 25000 } = {}) 
     } catch (e) {}
   }
 
-  const [codex, puter, antigravity, muse] = await Promise.all([
+  const [codex, antigravity, muse] = await Promise.all([
     queryCodexQuota(timeoutMs),
-    queryPuterQuota(timeoutMs),
     queryAntigravityQuota(timeoutMs),
     queryMuseQuota(timeoutMs)
   ]);
@@ -297,7 +260,6 @@ export async function fetchAllQuotas({ force = false, timeoutMs = 25000 } = {}) 
     updatedAt: new Date().toISOString(),
     ttlMs: DEFAULT_TTL_MS,
     engines: {
-      puter,
       muse,
       codex,
       antigravity
@@ -326,18 +288,7 @@ export function checkEngineQuotaGate(engine, quotaRegistry = null) {
   if (reg.updatedAt && Date.now() - Date.parse(reg.updatedAt) >= (reg.ttlMs || DEFAULT_TTL_MS)) return { allowed: true };
 
   const eng = engine.toLowerCase();
-  if (eng === 'puter') {
-    const p = reg.engines.puter;
-    if (p && p.status === 'ok') {
-      if (p.remainingPercent !== null && p.remainingPercent <= 0) {
-        return {
-          allowed: false,
-          reason: 'Puter ayl\u0131k token kotas\u0131 t\u00fckendi (%0 kald\u0131)',
-          remainingPercent: p.remainingPercent
-        };
-      }
-    }
-  } else if (eng === 'codex') {
+  if (eng === 'codex') {
     const c = reg.engines.codex;
     if (c && c.status === 'ok') {
       if (c.spendControlReached) {
@@ -374,21 +325,7 @@ export function formatQuotaTable(data) {
   );
   lines.push('-'.repeat(78));
 
-  // 1. Puter
-  const p = e.puter;
-  if (p && p.status === 'ok') {
-    const remStr = p.remainingPercent != null ? `%${p.remainingPercent.toFixed(1)} (${Math.round(p.remaining)}/${p.monthAllowance} kr)` : 'Bilinmiyor';
-    lines.push(
-      'Puter (0$)'.padEnd(14) +
-      'AKTIF'.padEnd(10) +
-      remStr.padEnd(28) +
-      'Ayl\u0131k DeepSeek V4 Flash / Pro kotas\u0131'
-    );
-  } else {
-    lines.push('Puter (0$)'.padEnd(14) + 'HATA'.padEnd(10) + (p?.error || 'Ula\u015f\u0131lam\u0131yor').slice(0, 50));
-  }
-
-  // 2. Muse
+  // 1. Muse
   const m = e.muse;
   if (m && m.status === 'ok') {
     lines.push(
@@ -401,7 +338,7 @@ export function formatQuotaTable(data) {
     lines.push('Meta Muse'.padEnd(14) + 'HATA'.padEnd(10) + (m?.error || 'Ula\u015f\u0131lam\u0131yor').slice(0, 50));
   }
 
-  // 3. Codex
+  // 2. Codex
   const c = e.codex;
   if (c && c.status === 'ok') {
     const usedStr = c.usedPercent != null ? `%${c.remainingPercent}% kalan (%${c.usedPercent} kul.)` : 'Bilinmiyor';
@@ -416,7 +353,7 @@ export function formatQuotaTable(data) {
     lines.push('Codex (OpenAI)'.padEnd(14) + 'HATA'.padEnd(10) + (c?.error || 'Ula\u015f\u0131lam\u0131yor').slice(0, 50));
   }
 
-  // 4. Antigravity
+  // 3. Antigravity
   const a = e.antigravity;
   if (a && a.status === 'ok' && a.quotas?.length > 0) {
     const gem5 = a.quotas.find(q => q.modelGroup?.includes('Gemini') && q.window?.includes('Five Hour'));

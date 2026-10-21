@@ -2,7 +2,7 @@
 
 > **Smart Token Offloading and Multi-Engine Orchestrator for Antigravity**
 
-AI Factory routes coding and repository work from Antigravity/Gemini to local AI CLIs. You can let it choose a starting engine or name OpenCode, Claude, Muse, Puter, or Codex yourself. It records what actually ran and can continue a saved CLI session.
+AI Factory routes coding and repository work from Antigravity/Gemini to local AI CLIs. You can let it choose a starting engine or name OpenCode, Claude, Muse, or Codex yourself. It records what actually ran and can continue a saved CLI session.
 
 | Before | After |
 |---|---|
@@ -18,24 +18,23 @@ OpenCode is restricted to the free models in [router_config.json](router_config.
 
 | Feature | What it does |
 |---|---|
-| Smart routing | Starts routine tasks with Puter Flash; explicit requests can select OpenCode, Claude, Muse, or Codex. |
+| Smart routing | Starts routine tasks with Muse Contributor; complex tasks use Codex, and explicit requests can select OpenCode, Claude, Muse, or Codex. |
 | Model guardrails | Rejects paid OpenCode IDs and unlisted Claude models; Opus 5.5 requires an explicit request. |
 | Claude delegation check | The Antigravity hook rejects direct headless Claude launches from terminal tools and directs the agent to the router; help and authentication checks remain available. |
-| Engine-specific fallback | Puter, Muse, and Codex have their own fallback order; OpenCode/Claude hand back to Gemini rather than trying another paid engine. |
+| Engine-specific fallback | Muse and Codex fall back to each other; OpenCode/Claude hand back to Gemini rather than trying another paid engine. |
 | Named sessions | `--name` stores a session; `--resume` continues it when the CLI supplied an ID. |
 | Execution report | `path` lists only engines attempted in **this** router call; `succeed_with` names the successful engine or Gemini handoff. |
-| Health checks | Configurable watchdog and circuit breaker detect stalled or quarantined engines. `--quota` checks Puter, Muse, Codex, and Antigravity, not OpenCode/Claude. |
+| Health checks | Configurable watchdog and circuit breaker detect stalled or quarantined engines. `--quota` checks Muse, Codex, and Antigravity, not OpenCode/Claude. |
 | AGY task checks | For long delegated work, the plugin instructs AGY to schedule status checks at 30, 120, and 240 seconds, then every 120 seconds until the task ends, when its in-turn timer tool is available. |
 
 AGY is instructed to inspect actual progress while a long task runs. If its timer tool supports `TimerCondition`, AGY is instructed to use `never` so progress messages do not cancel checks. The router starts its task watchdog as soon as an engine launches and prints a start notice. It reports whether the engine process is alive at 30, 120, and 240 seconds, then every 120 seconds while it runs. After 30 seconds without initial output, or 120 seconds of later silence, it also checks the engine and its child processes. If their CPU use stays unchanged for another 120 seconds, it stops the task. Every task has a 10-minute limit, even if output continues; if CPU information is unavailable, that limit still applies. Adjust these limits in `router_config.json`.
 
 ## Tools and Models
 
-`--engine` chooses the tool; `--model` chooses its model. The table shows the default when you select that tool without a model. With no tool selected, routing rules start routine tasks with Puter `flash` and select Puter `pro` for configured complexity keywords.
+`--engine` chooses the tool; `--model` chooses its model. The table shows the default when you select that tool without a model. With no tool selected, routine tasks start with Muse Contributor and configured complex tasks use Codex `gpt-6.1-sol`.
 
 | Tool (`--engine`) | CLI used | Default model | Model names accepted with `--model` |
 |---|---|---|---|
-| Puter (`puter`) | Native Node agent through the local Puter bridge | `flash` | `flash`, `pro`, `r1` |
 | Muse (`muse`) | `muse exec` | `muse-spark-1.3-contributor` | Fixed to `muse-spark-1.3-contributor`; contributor mode is always enabled |
 | Codex (`codex`) | `codex exec` | `gpt-6.1-sol` | `gpt-6-luna`, `gpt-5.6-luna`, `gpt-6.1-sol`, `gpt-6-sol`, `gpt-5.6-terra`, `gpt-5.6-sol`, `gpt-5.5`, `gpt-6-astra` |
 | OpenCode (`opencode`) | `opencode run` | `deepseek-v4.1-flash-free` | The 12 configured free models listed below |
@@ -72,22 +71,14 @@ Paid OpenCode models are rejected by the router.
 
 </details>
 
-**Puter model selection:** The bundled Node agent calls the local bridge directly. `flash`, `pro`, and `r1` use their configured Puter model mappings. Authentication belongs to the Puter account; the worker sends no DeepSeek API key.
-
-The Puter agent can list, read, write, and edit files inside its working directory, and saves conversations for `--resume`. Private paths and symlinks escaping the workspace are rejected. Command execution is off by default; `engines.puter.agent.allow_commands` enables argument-array commands with a 30-second limit. Those commands run with the host user's OS permissions; the file-tool workspace checks do not sandbox commands. `max_turns` limits each request (default 32).
-
 These are the router's configured choices. Availability, quota, and charges depend on your provider account. See [Usage](#usage) for examples for each tool.
 
 ## Architecture
 
 [Interactive system diagram HTML](docs/diagrams/ai-factory-architecture.html) · [Interactive routing flow HTML](docs/diagrams/ai-factory-routing.html) · [Architecture notes](docs/ARCHITECTURE.md)
 
-![AI Factory system architecture](docs/diagrams/ai-factory-architecture.visual-check.1440x900.light.png)
-
-![AI Factory routing flow](docs/diagrams/ai-factory-routing.visual-check.1440x900.light.png)
-
 The Antigravity plugin adds routing guidance; the local router selects a CLI, applies model and health checks, records sessions, and prints the result. A Gemini handoff means the parent agent must finish the task—it is not proof that the task is complete. Both diagrams and their interactive viewer controls are in English.
-GitHub shows the PNG previews above; download either HTML file and open it locally for search, focus views, and theme switching.
+Open either HTML diagram locally for search, focus views, and theme switching.
 
 ---
 
@@ -96,7 +87,6 @@ GitHub shows the PNG previews above; download either HTML file and open it local
 ```text
 ai_factory/
 ├── router.mjs                 # Main CLI entry point
-├── server.mjs                 # Puter RPC and local bridge service
 ├── quota_tracker.mjs          # Multi-provider quota inspection utility
 ├── check_quotas.ps1           # PowerShell quota check runner
 ├── deploy_skill.mjs           # Distribution script for global Antigravity dirs
@@ -106,8 +96,6 @@ ai_factory/
 │   └── diagrams/              # Interactive architecture and workflow diagrams
 ├── src/                       # Core implementation modules
 │   ├── router.mjs
-│   ├── puter_agent.mjs         # Native Puter tool loop and saved conversations
-│   ├── server.mjs
 │   └── quota_tracker.mjs
 ├── lib/                       # Path resolution and plugin utilities
 │   ├── paths.mjs
@@ -140,13 +128,12 @@ ai_factory/
 | Antigravity integration | Antigravity CLI (`agy`) or Antigravity IDE |
 | OpenCode tasks | OpenCode CLI installed and signed in to a provider with the selected free model |
 | Claude tasks | Claude Code CLI installed and signed in; your account may incur charges |
-| Puter tasks | Node.js and an authenticated local Puter bridge: start it with `npm start`, then open `http://127.0.0.1:8080` to sign in |
 | Muse tasks | Muse CLI (`muse`) installed and signed in with access to `muse-spark-1.3-contributor` |
 | Codex tasks | Codex CLI (`codex`) installed and signed in with access to the requested model |
 
 | Install step | Command | Result |
 |---|---|---|
-| Dependencies | `npm install` | Installs the local Puter bridge dependency. |
+| Dependencies | `npm install` | Installs package dependencies. |
 | Global Antigravity plugin | `node deploy_skill.mjs` | Installs plugin, hooks, and rules. |
 | Native CLI/IDE skill catalog | `node deploy_skill.mjs --builtin` | Also adds the built-in AI Factory skill where the host catalog exists. |
 
@@ -194,14 +181,9 @@ Plugin backups are stored in `~/.gemini/config/plugin-backups/`, outside the act
 
 ## Usage
 
-### Default Code/Repo Delegation (0$ Puter Flash)
+### Default Code/Repo Delegation (Muse Contributor)
 ```bash
 node router.mjs --task "Analyze the repository structure and summarize dependencies"
-```
-
-### Deep Reasoning Mode (Puter Pro)
-```bash
-node router.mjs --engine puter --model pro --task "Optimize algorithmic complexity for the core pipeline"
 ```
 
 ### Meta Muse Agent (0$ Contributor Mode)
@@ -258,7 +240,7 @@ Or via PowerShell:
 
 ## Security
 
-- Authentication tokens (`puter_token.txt`) and session registries are listed in `.gitignore` to prevent credential exposure.
+- Local session and quota registries are listed in `.gitignore` to prevent accidental commits.
 - Muse integration is hard-locked to `muse-spark-1.3-contributor`, preventing accidental charges from billed models.
 - OpenCode and Claude model IDs are checked before either CLI starts. Claude still uses your own account and may be billed.
 

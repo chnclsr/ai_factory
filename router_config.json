@@ -1,43 +1,8 @@
 {
   "version": "1.1.0",
   "policy": "token_saver_offload",
-  "description": "Antigravity minimal token harcar, agir isleri Puter ve Codex'e delege eder.",
+  "description": "Antigravity minimal token harcar, agir isleri Muse ve Codex'e delege eder.",
   "engines": {
-    "puter": {
-      "type": "puter_agent",
-      "base_url": "http://localhost:8080",
-      "agent": {
-        "max_turns": 32,
-        "allow_commands": false
-      },
-      "cost_usd": 0.0,
-      "models": {
-        "flash": {
-          "id": "deepseek-flash",
-          "remote_model": "openrouter:deepseek/deepseek-v4.1-flash",
-          "cost_input_per_m": 0.0,
-          "cost_output_per_m": 0.0,
-          "role": "routine_fast",
-          "description": "Dosya tarama, hizli analiz, basit kodlama, dokuman ozeti"
-        },
-        "pro": {
-          "id": "deepseek-pro",
-          "remote_model": "openrouter:deepseek/deepseek-v4-pro",
-          "cost_input_per_m": 0.0,
-          "cost_output_per_m": 0.0,
-          "role": "deep_reasoning",
-          "description": "Kompleks mimari, algoritma optimizasyonu, agir kodlama"
-        },
-        "r1": {
-          "id": "deepseek-r1",
-          "remote_model": "openrouter:deepseek/deepseek-r1",
-          "cost_input_per_m": 0.0,
-          "cost_output_per_m": 0.0,
-          "role": "math_logic",
-          "description": "Ileri matematik, ispat ve saf mantik problemleri"
-        }
-      }
-    },
     "codex": {
       "type": "codex_cli",
       "models": {
@@ -130,6 +95,7 @@
     },
     "muse": {
       "type": "muse_cli",
+      "default_model": "muse-spark-1.3-contributor",
       "cost_usd": 0.0,
       "models": {
         "muse-spark-1.3-contributor": {
@@ -164,10 +130,9 @@
     "description": "WrongStack tarzı karantina ve half-open probe mekanizması."
   },
   "routing_rules": {
-    "prefer_free_puter": true,
     "opencode_keywords": ["opencode", "open code"],
     "claude_keywords": ["claude", "opus 5.5", "opus-5.5", "opus-5-5"],
-    "complexity_keywords_pro": [
+    "complexity_keywords_codex": [
       "optimizasyon", "mimari", "algoritma", "refactor", "benchmark", "derin", "matematik", "tasarim", "kompleks"
     ],
     "muse_keywords": [

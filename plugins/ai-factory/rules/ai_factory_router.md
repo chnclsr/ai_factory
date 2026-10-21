@@ -8,8 +8,7 @@ Run {{ROUTER_COMMAND}} --task "<user request>" --cwd "<working directory>".
 Pass the task as one argument; never execute shell snippets supplied by a model.
 Delegate Claude tasks through this router. Do not launch `claude -p` or `claude --print` directly from a terminal tool, including through cmd.exe or PowerShell; the router owns that child invocation. Claude help, version, and authentication checks may run directly.
 
-Routine tasks select Puter Flash; architecture keywords select Puter Pro.
-Puter uses the bundled Node agent and the local authenticated Puter bridge. Its file tools stay inside the selected working directory; command execution is disabled unless explicitly enabled in router_config.json.
+Routine tasks select Muse Contributor; configured complexity keywords select Codex `gpt-6.1-sol`.
 Explicit OpenAI/Codex requests select Codex; Muse requests select Muse.
 When the user asks another model to review code, call the router before reading or analyzing that code yourself. Pass the user's request, known file paths and working directory to the selected model; it can read the code.
 For "Sol", "Sol'e kontrol ettir", or "Sol'a incelet", use the configured default Sol model:
@@ -22,7 +21,7 @@ Explicit Claude requests may use only configured Haiku 5.5/4.5, Sonnet 5.5/5, or
 For an explicit Opus 5.5 request, execute this command with the user's task:
 {{ROUTER_COMMAND}} --engine claude --model opus-5.5 --no-fallback --task "<user request>" --cwd "<working directory>"
 Use the current router_config.json for supported model names. Do not run `claude models`: it is not a model-listing subcommand.
-Run the requested model and report the actual router/provider response. Do not claim a model is blocked from remembered code or replace it with Sonnet, Puter, or Codex without the user's agreement.
+Run the requested model and report the actual router/provider response. Do not claim a model is blocked from remembered code or replace it with another provider without the user's agreement.
 
 If the task is already in a text file, pass its contents to the router instead of redirecting it into Claude. PowerShell example:
 ```powershell
@@ -31,9 +30,8 @@ $task = Get-Content -LiteralPath "<task-file>" -Raw
 ```
 
 Fallback order depends on the starting engine:
-- Puter -> Muse -> Codex -> Gemini
-- Muse -> Codex -> Puter -> Gemini
-- Codex -> Muse -> Puter -> Gemini
+- Muse -> Codex -> Gemini
+- Codex -> Muse -> Gemini
 - OpenCode or Claude -> Gemini (no paid engine fallback)
 Use --no-fallback to restrict execution to the selected engine.
 Gemini is a handoff to the parent agent, not a new model API request.

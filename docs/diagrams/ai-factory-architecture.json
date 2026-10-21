@@ -8,7 +8,7 @@
     "animation": "none",
     "views": [
       { "id": "giristen-karara", "label": "Input and routing", "focus": ["host", "hooks", "router", "policy"], "note": "Antigravity passes the task to the router through plugin rules." },
-      { "id": "motorlar", "label": "Execution engines", "focus": ["router", "puter", "muse", "codex", "opencode", "claude"], "note": "Local CLI adapters run the selected provider." },
+      { "id": "motorlar", "label": "Execution engines", "focus": ["router", "muse", "codex", "opencode", "claude"], "note": "Local CLI adapters run the selected provider." },
       { "id": "durum", "label": "State and handoff", "focus": ["router", "registry", "gemini"], "note": "Sessions are saved; the report records a result or Gemini handoff." }
     ]
   },
@@ -19,7 +19,6 @@
     { "id": "router", "type": "backend", "label": "AI Factory Router", "sublabel": "Select, run, report", "row": 2, "col": 2 },
     { "id": "policy", "type": "security", "label": "Model policy", "sublabel": "Allowlist and cost", "row": 0, "col": 2 },
     { "id": "registry", "type": "database", "label": "Local state", "sublabel": "Sessions and health", "row": 4, "col": 2 },
-    { "id": "puter", "type": "backend", "label": "Puter bridge", "sublabel": "Agent + local service", "row": 0, "col": 4 },
     { "id": "muse", "type": "external", "label": "Muse CLI", "sublabel": "Contributor model", "row": 1, "col": 4 },
     { "id": "codex", "type": "external", "label": "Codex CLI", "sublabel": "Configured account", "row": 2, "col": 4 },
     { "id": "opencode", "type": "external", "label": "OpenCode CLI", "sublabel": "Allowed free models", "row": 3, "col": 4 },
@@ -27,22 +26,21 @@
     { "id": "gemini", "type": "frontend", "label": "Gemini handoff", "sublabel": "Parent agent continues", "row": 4, "col": 0 }
   ],
   "boundaries": [
-    { "kind": "region", "label": "Local AI Factory", "wraps": ["hooks", "router", "policy", "registry", "puter"], "pad": 16 }
+    { "kind": "region", "label": "Local AI Factory", "wraps": ["hooks", "router", "policy", "registry"], "pad": 16 }
   ],
   "connections": [
     { "from": "host", "to": "hooks", "label": "task", "variant": "emphasis" },
     { "from": "hooks", "to": "router", "label": "CLI call", "variant": "emphasis" },
     { "from": "policy", "to": "router", "label": "model allowlist", "labelAt": [574, 132], "variant": "security" },
     { "from": "router", "to": "registry", "label": "sessions and health", "labelAt": [574, 376] },
-    { "from": "router", "to": "puter", "label": "default", "labelAt": [904, 88], "variant": "emphasis" },
-    { "from": "router", "to": "muse", "label": "fallback", "labelAt": [904, 210] },
+    { "from": "router", "to": "muse", "label": "default / fallback", "labelAt": [904, 210] },
     { "from": "router", "to": "codex", "label": "fallback / explicit", "labelAt": [904, 332] },
     { "from": "router", "to": "opencode", "label": "free selection", "labelAt": [904, 454] },
     { "from": "router", "to": "claude", "label": "paid selection", "labelAt": [904, 576], "variant": "security" },
     { "from": "router", "to": "gemini", "label": "final handoff", "variant": "dashed" }
   ],
   "cards": [
-    { "dot": "cyan", "title": "Selection", "items": ["Routine tasks start with Puter", "OpenCode and Claude can be selected explicitly"] },
+    { "dot": "cyan", "title": "Selection", "items": ["Routine tasks start with Muse", "OpenCode and Claude can be selected explicitly"] },
     { "dot": "rose", "title": "Model guardrails", "items": ["OpenCode: configured free models", "Claude: Haiku/Sonnet + explicit Opus 5.5"] },
     { "dot": "emerald", "title": "Handoff", "items": ["Attempts appear in the execution report", "A Gemini handoff does not mean the task is complete"] }
   ]

@@ -8,15 +8,14 @@ The plugin's `PreInvocation` / `PreToolUse` hooks live in `plugins/ai-factory/ho
 
 | Starting engine | Selection | Failure path (unless `--no-fallback`) |
 |---|---|---|
-| Puter | Default Flash; Pro for configured complexity keywords | Muse → Codex → Gemini handoff |
-| Muse | Explicit or configured Muse keywords | Codex → Puter → Gemini handoff |
-| Codex | Explicit or configured Codex keywords | Muse → Puter → Gemini handoff |
+| Muse | Default for routine tasks; explicit or configured Muse keywords | Codex → Gemini handoff |
+| Codex | Configured complexity keywords or explicit Codex requests | Muse → Gemini handoff |
 | OpenCode | Explicit or OpenCode keywords; only free allowlisted models | Gemini handoff |
 | Claude | Explicit or Claude keywords; Haiku by default, Opus 5.5 when explicitly requested | Gemini handoff |
 
 An explicit `--engine` wins over keyword selection. OpenCode and Claude model aliases resolve through `router_config.json`, then pass an allowlist and cost check before execution. The router invokes their local CLIs with JSON output, captures response text and session ID, and records a named session only when the provider returns an ID. On resume, the saved engine and working directory are reused; OpenCode and Claude permit switching to another allowed model. CLI authentication and actual provider access are external prerequisites.
 
-The per-engine health gate checks cached quota and circuit-breaker state before launching an engine. A failed response is classified; only eligible failures follow the engine-specific fallback order. Puter runs the bundled `src/puter_agent.mjs` worker against the local bridge (`src/server.mjs`). It uses structured tool turns for workspace file operations and stores its own conversation history. Optional command execution uses host OS permissions and is disabled by default. Muse and Codex use their own CLIs. Gemini is a handoff to the parent Antigravity agent, not another API call by the router.
+The per-engine health gate checks cached quota and circuit-breaker state before launching an engine. A failed response is classified; only eligible failures follow the engine-specific fallback order. Muse and Codex use their own CLIs. Gemini is a handoff to the parent Antigravity agent, not another API call by the router.
 
 ## Report contract
 

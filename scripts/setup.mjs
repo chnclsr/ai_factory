@@ -34,7 +34,7 @@ try {
     console.log('Plugin installed: ' + result.target);
     if (result.backup) console.log('Previous plugin backup: ' + result.backup);
   }
-  console.log('Setup complete. Run npm start, then open http://127.0.0.1:' + (process.env.AI_FACTORY_PORT || 8080));
+  console.log('Setup complete. Route tasks with: node router.mjs --task "<request>"');
   console.log('Restart Gemini/Antigravity to load hooks. Target: ' + PLUGIN_TARGET);
 } catch (error) {
   console.error('[Setup] ' + error.message);

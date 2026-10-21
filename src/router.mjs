@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * AI Factory - Smart Router Engine (v2.1 - Hardened & Supervised)
- * Antigravity (orkestrasyon) -> Puter (0$ DeepSeek Flash/Pro/R1) / Codex (GPT-6 & GPT-5.6 Serisi) / Gemini (Supervisor)
+ * Antigravity (orkestrasyon) -> Muse / Codex (GPT-6 & GPT-5.6 Serisi) / Gemini (Supervisor)
  * 
  * Hardened Features (Codex Sol Review Verified):
  * - Atomic JSON State Writes (Lost-update & parse error prevention)
@@ -19,7 +19,7 @@ import { fileURLToPath } from 'url';
 import { spawn, execSync } from 'child_process';
 import crypto from 'crypto';
 import { fetchAllQuotas, formatQuotaTable, checkEngineQuotaGate } from './quota_tracker.mjs';
-import { ROOT, CONFIG_FILE, BRIDGE_URL, stateFile } from '../lib/paths.mjs';
+import { ROOT, CONFIG_FILE, stateFile } from '../lib/paths.mjs';
 import { decideWatchdogAction, sampleTreeCpuMs } from './watchdog.mjs';
 
 const __dirname = ROOT;
@@ -321,10 +321,6 @@ async function runCommand(cmdString, cwd, engineName, config) {
       env: {
         ...process.env,
         AI_FACTORY_ROUTER_DEPTH: String(safeDepth + 1),
-        ...(engineName === 'puter' ? {
-          DEEPSEEK_API_KEY: '',
-          DEEPSEEK_BASE_URL: ''
-        } : {})
       },
       stdio: ['ignore', 'pipe', 'pipe']
     });
@@ -539,88 +535,11 @@ function decideEngineAndModel(task, config, forcedEngine, forcedModel) {
     }
   }
 
-  // 2. Puter Pro (Derin d\u00fc\u015f\u00fcnme / kompleks g\u00f6revler)
-  for (const kw of (config?.routing_rules?.complexity_keywords_pro || [])) {
-    if (lower.includes(kw)) {
-      return { engine: 'puter', model: 'pro', reason: `Kompleks g\u00f6rev (0$ Puter Pro): ${kw}` };
-    }
+  // Complex tasks use the flagship Codex model; routine tasks start with Muse.
+  for (const kw of (config?.routing_rules?.complexity_keywords_codex || [])) {
+    if (lower.includes(kw)) return { engine: 'codex', model: 'gpt-6.1-sol', reason: `Complex task: ${kw}` };
   }
-
-  // 3. Varsay\u0131lan: Puter Flash (0$ H\u0131zl\u0131 analiz)
-  return { engine: 'puter', model: 'flash', reason: 'Rutin h\u0131zl\u0131 analiz (0$ Puter Flash)' };
-}
-
-function decideFallbackCodexModel(originalModel, task, errors) {
-  const lower = (task || '').toLowerCase();
-  const isFrontier = lower.includes('matematik') || lower.includes('ispat') || lower.includes('benchmark');
-
-  if (isFrontier) {
-    return {
-      model: 'gpt-6.1-sol',
-      tier: 'flagship',
-      reason: 'A\u011f\u0131r matematik/ispat g\u00f6revi i\u00e7in amiral gemisi gpt-6.1-sol'
-    };
-  }
-
-  if (originalModel === 'flash' || !originalModel) {
-    return {
-      model: 'gpt-6-luna',
-      tier: 'ultra_cheap',
-      reason: 'Rutin g\u00f6rev i\u00e7in ekonomik GPT-6 modeli ($0.10/M)'
-    };
-  }
-
-  return {
-    model: 'gpt-6.1-sol',
-    tier: 'flagship',
-    reason: 'Kompleks mimari g\u00f6revi i\u00e7in gpt-6.1-sol amiral gemisi'
-  };
-}
-
-async function ensurePuterBridge() {
-  try {
-    const res = await fetch(BRIDGE_URL, { signal: AbortSignal.timeout(1000) });
-    if (res.ok) return;
-  } catch (e) {
-    console.log('[AI Factory] Puter K\u00f6pr\u00fcs\u00fc (localhost:8080) kapal\u0131. Arka planda ba\u015flat\u0131l\u0131yor...');
-    const serverScript = path.join(__dirname, 'server.mjs');
-    const child = spawn(process.execPath, [serverScript], {
-      cwd: __dirname,
-      detached: true,
-      windowsHide: true,
-      stdio: 'ignore'
-    });
-    child.unref();
-
-    for (let i = 0; i < 10; i++) {
-      await new Promise(r => setTimeout(r, 500));
-      try {
-        const res2 = await fetch(BRIDGE_URL, { signal: AbortSignal.timeout(500) });
-        if (res2.ok) {
-          console.log('[AI Factory] Puter K\u00f6pr\u00fcs\u00fc ba\u015far\u0131yla ba\u015flat\u0131ld\u0131 (localhost:8080).');
-          return;
-        }
-      } catch (err) {}
-    }
-  }
-}
-
-async function executePuter(task, model, cwd, resumeSessionId, config) {
-  const models = config?.engines?.puter?.models || {};
-  const selected = models[model] || Object.values(models).find(entry => entry.id === model);
-  if (!selected || !/^[a-z0-9./-]+$/.test(selected.id)) throw new Error(`Unsupported puter model: ${model}`);
-  if (resumeSessionId && !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(resumeSessionId)) throw new Error('Invalid Puter session ID');
-  await ensurePuterBridge();
-  const promptFile = stateFile(`.puter_prompt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.txt`);
-  fs.writeFileSync(promptFile, task, 'utf8');
-  const worker = path.join(__dirname, 'src', 'puter_agent.mjs');
-  let cmd = `"${process.execPath}" "${worker}" --model ${selected.id} --task-file "${promptFile}"`;
-  if (resumeSessionId) cmd += ` --session-id ${resumeSessionId}`;
-  try {
-    return await runCommand(cmd, cwd, 'puter', config);
-  } finally {
-    try { fs.unlinkSync(promptFile); } catch (e) {}
-  }
+  return { engine: 'muse', model: 'muse-spark-1.3-contributor', reason: 'Routine task: Muse Contributor' };
 }
 
 function resolveCodexModel(rawModel, config) {
@@ -783,7 +702,7 @@ async function main() {
 
   const options = parseCliArgs();
   const config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
-  if (options.engine && !['puter', 'muse', 'codex', 'opencode', 'claude', 'gemini'].includes(options.engine)) throw new Error('Unknown engine: ' + options.engine);
+  if (options.engine && !['muse', 'codex', 'opencode', 'claude', 'gemini'].includes(options.engine)) throw new Error('Unknown engine: ' + options.engine);
   for (const [key, value] of Object.entries({ model: options.model, cwd: options.cwd })) {
     if (/[\x00-\x1f"%&|<>^!$\x60]/.test(value)) throw new Error('Unsafe shell argument: ' + key);
   }
@@ -803,8 +722,8 @@ AI Factory Smart Router CLI (v2.1 - Hardened & Supervised)
 Kullan\u0131m:
   node router.mjs --task "G\u00f6rev metni" [--name "oturum-adi"] [--cwd "dizin"]
   node router.mjs --resume "oturum-adi" --task "Devam sorusu"
-  node router.mjs --engine codex|puter|muse|opencode|claude [--model model-adi] --task "..."
-  node router.mjs --quota   # Puter, Codex, Antigravity ve Muse canl\u0131 kotalar\u0131n\u0131 listeler
+  node router.mjs --engine codex|muse|opencode|claude [--model model-adi] --task "..."
+  node router.mjs --quota   # Codex, Antigravity ve Muse canlı kotalarını listeler
     `);
     process.exit(0);
   }
@@ -826,6 +745,8 @@ Kullan\u0131m:
       throw new Error(`Session not found: ${options.resume}`);
     }
   }
+
+  if (targetEngine && !['muse', 'codex', 'opencode', 'claude', 'gemini'].includes(targetEngine)) throw new Error('Unsupported engine in saved session: ' + targetEngine);
 
   if (!targetEngine || !targetModel) {
     const decision = decideEngineAndModel(options.task, config, targetEngine, targetModel);
@@ -862,7 +783,7 @@ Kullan\u0131m:
   let lastOutput = '';
   let lastSessionId = null;
 
-  // \u2500\u2500 1. Hedef Motor Puter ise: Puter -> Muse -> Codex -> Gemini \u2500\u2500
+  // Muse and Codex are the default and fallback engines.
   if (targetEngine === 'opencode' || targetEngine === 'claude') {
     choices.push(targetEngine);
     const gate = canExecuteEngine(targetEngine, config);
@@ -893,143 +814,9 @@ Kullan\u0131m:
         pathSteps.push(`${targetEngine}(${targetModel}) [FAIL: ${err.message}]`);
       }
     }
-  } else if (targetEngine === 'puter') {
-    if (!choices.includes('puter')) choices.push('puter');
-    const gate = canExecuteEngine('puter', config);
-    if (!gate.allowed) {
-      console.warn(`[AI Factory Pre-Flight Gate] \u26d4 Puter motoru karantinada (${gate.reason}). S\u0131radaki motora ge\u00e7iliyor...`);
-      pathSteps.push(`puter(${targetModel}) [QUARANTINED]`);
-      errors.push(`puter (quarantined: ${gate.reason})`);
-    } else {
-      try {
-        const res = await executePuter(options.task, targetModel, options.cwd, resumeSessionId, config);
-        lastOutput = res.output;
-        if (res.exitCode === 0 && !res.watchdogTimeout && res.output.trim().length > 0) {
-          succeedWith = `puter-${targetModel}`;
-          recordEngineSuccess('puter', config);
-          pathSteps.push(`puter(${targetModel}) [OK]`);
-        } else {
-          const classified = classifyError(res.exitCode, res.output, res);
-          recordEngineFailure('puter', classified, config);
-          errors.push(`puter-${targetModel} (${classified.reason})`);
-          pathSteps.push(`puter(${targetModel}) [FAIL: ${classified.reason}]`);
-
-          if (!classified.fallbackEligible) {
-            console.warn(`\n[AI Factory Abort Guard] \u0130stek sonland\u0131r\u0131ld\u0131 (${classified.reason}). Fallback zinciri durduruldu.\n`);
-            options.engine = 'aborted';
-          }
-        }
-      } catch (err) {
-        const classified = classifyError(1, err.message);
-        recordEngineFailure('puter', classified, config);
-        errors.push(`puter (${err.message})`);
-        pathSteps.push(`puter(${targetModel}) [FAIL: ${err.message}]`);
-      }
-    }
-
-    // 1. Fallback: Muse (0$ muse-spark-1.3-contributor)
-    if (!succeedWith && options.engine !== 'aborted' && !options.noFallback) {
-      if (!choices.includes('muse')) choices.push('muse');
-      console.warn(`\n[AI Factory Fallback] Puter ba\u015far\u0131s\u0131z oldu veya atland\u0131 (${errors.join(', ')}).`);
-      console.warn(`[AI Factory Fallback] S\u0131radaki motor: Muse (0$ muse-spark-1.3-contributor)...`);
-
-      const museGate = canExecuteEngine('muse', config);
-      if (!museGate.allowed) {
-        console.warn(`[AI Factory Pre-Flight Gate] \u26d4 Muse motoru karantinada (${museGate.reason}).`);
-        pathSteps.push('muse(muse-spark-1.3-contributor) [QUARANTINED]');
-        errors.push(`muse (quarantined: ${museGate.reason})`);
-      } else {
-        try {
-          const resMuse = await executeMuse(options.task, 'muse-spark-1.3-contributor', options.cwd, null, config);
-          lastOutput = resMuse.output;
-          if (resMuse.sessionId) lastSessionId = resMuse.sessionId;
-          if (resMuse.exitCode === 0 && !resMuse.watchdogTimeout && resMuse.output.trim().length > 0) {
-            succeedWith = 'muse-spark-1.3-contributor';
-            recordEngineSuccess('muse', config);
-            targetEngine = 'muse';
-            targetModel = 'muse-spark-1.3-contributor';
-            pathSteps.push('muse(muse-spark-1.3-contributor) [OK]');
-          } else {
-            const classifiedMuse = classifyError(resMuse.exitCode, resMuse.output, resMuse);
-            recordEngineFailure('muse', classifiedMuse, config);
-            errors.push(`muse-spark-1.3-contributor (${classifiedMuse.reason})`);
-            pathSteps.push(`muse(muse-spark-1.3-contributor) [FAIL: ${classifiedMuse.reason}]`);
-
-            if (!classifiedMuse.fallbackEligible) {
-              console.warn(`\n[AI Factory Abort Guard] \u0130stek sonland\u0131r\u0131ld\u0131 (${classifiedMuse.reason}). Fallback durduruldu.\n`);
-              options.engine = 'aborted';
-            }
-          }
-        } catch (err) {
-          const classifiedMuse = classifyError(1, err.message);
-          recordEngineFailure('muse', classifiedMuse, config);
-          errors.push(`muse (${err.message})`);
-          pathSteps.push(`muse(muse-spark-1.3-contributor) [FAIL: ${err.message}]`);
-        }
-      }
-    }
-
-    // 2. Fallback: Codex (GPT-6 Luna -> Sol)
-    if (!succeedWith && options.engine !== 'aborted' && !options.noFallback) {
-      if (!choices.includes('codex')) choices.push('codex');
-      const fallback = decideFallbackCodexModel(targetModel, options.task, errors);
-      console.warn(`\n[AI Factory Fallback] Muse de ba\u015far\u0131s\u0131z oldu (${errors.join(', ')}).`);
-      console.warn(`[AI Factory Fallback] Dinamik maliyet tercihi: ${fallback.reason} -> Model: ${fallback.model}`);
-
-      const codexGate = canExecuteEngine('codex', config);
-      if (!codexGate.allowed) {
-        console.warn(`[AI Factory Pre-Flight Gate] \u26d4 Codex motoru da karantinada (${codexGate.reason}).`);
-        pathSteps.push(`codex(${fallback.model}) [QUARANTINED]`);
-        errors.push(`codex (quarantined: ${codexGate.reason})`);
-      } else {
-        try {
-          const res = await executeCodex(options.task, fallback.model, options.cwd, null, config);
-          lastOutput = res.output;
-          if (res.exitCode === 0 && !res.watchdogTimeout && res.output.trim().length > 0) {
-            succeedWith = `codex-${fallback.model}`;
-            recordEngineSuccess('codex', config);
-            targetEngine = 'codex';
-            targetModel = fallback.model;
-            pathSteps.push(`codex(${fallback.model}) [OK]`);
-          } else {
-            const classified = classifyError(res.exitCode, res.output, res);
-            recordEngineFailure('codex', classified, config);
-            errors.push(`codex-${fallback.model} (${classified.reason})`);
-            pathSteps.push(`codex(${fallback.model}) [FAIL: ${classified.reason}]`);
-
-            if (fallback.model !== 'gpt-6.1-sol' && classified.fallbackEligible) {
-              const highTierModel = 'gpt-6.1-sol';
-              const solGate = canExecuteEngine('codex', config);
-              if (solGate.allowed) {
-                console.warn(`\n[AI Factory Escalation] ${fallback.model} yetersiz kald\u0131. Amiral gemisi (${highTierModel}) deneniyor...`);
-                const resHigh = await executeCodex(options.task, highTierModel, options.cwd, null, config);
-                lastOutput = resHigh.output;
-                if (resHigh.exitCode === 0 && !resHigh.watchdogTimeout && resHigh.output.trim().length > 0) {
-                  succeedWith = `codex-${highTierModel}`;
-                  recordEngineSuccess('codex', config);
-                  targetEngine = 'codex';
-                  targetModel = highTierModel;
-                  pathSteps.push(`codex(${highTierModel}) [OK]`);
-                } else {
-                  const classifiedHigh = classifyError(resHigh.exitCode, resHigh.output, resHigh);
-                  recordEngineFailure('codex', classifiedHigh, config);
-                  errors.push(`codex-${highTierModel} (${classifiedHigh.reason})`);
-                  pathSteps.push(`codex(${highTierModel}) [FAIL: ${classifiedHigh.reason}]`);
-                }
-              }
-            }
-          }
-        } catch (err) {
-          const classified = classifyError(1, err.message);
-          recordEngineFailure('codex', classified, config);
-          errors.push(`codex-${fallback.model} (${err.message})`);
-          pathSteps.push(`codex(${fallback.model}) [FAIL: ${err.message}]`);
-        }
-      }
-    }
   } else if (targetEngine === 'muse') {
     if (!choices.includes('muse')) choices.push('muse');
-    // \u2500\u2500 2. Hedef Motor Muse ise: Muse -> Codex -> Puter -> Gemini \u2500\u2500
+    // Muse -> Codex -> Gemini
     const museGate = canExecuteEngine('muse', config);
     if (!museGate.allowed) {
       console.warn(`[AI Factory Pre-Flight Gate] \u26d4 Muse motoru karantinada (${museGate.reason}).`);
@@ -1096,41 +883,9 @@ Kullan\u0131m:
       }
     }
 
-    // Codex de ba\u015far\u0131s\u0131z olursa -> Puter (0$ Flash)'a devret
-    if (!succeedWith && options.engine !== 'aborted' && !options.noFallback) {
-      if (!choices.includes('puter')) choices.push('puter');
-      console.warn(`\n[AI Factory Fallback] Codex de ba\u015far\u0131s\u0131z oldu. Puter (0$ Flash) deneniyor...`);
-      const puterGate = canExecuteEngine('puter', config);
-      if (!puterGate.allowed) {
-        pathSteps.push('puter(flash) [QUARANTINED]');
-        errors.push(`puter (quarantined: ${puterGate.reason})`);
-      } else {
-        try {
-          const res = await executePuter(options.task, 'flash', options.cwd, null, config);
-          lastOutput = res.output;
-          if (res.exitCode === 0 && !res.watchdogTimeout && res.output.trim().length > 0) {
-            succeedWith = 'puter-flash';
-            recordEngineSuccess('puter', config);
-            targetEngine = 'puter';
-            targetModel = 'flash';
-            pathSteps.push('puter(flash) [OK]');
-          } else {
-            const classified = classifyError(res.exitCode, res.output, res);
-            recordEngineFailure('puter', classified, config);
-            errors.push(`puter-flash (${classified.reason})`);
-            pathSteps.push(`puter(flash) [FAIL: ${classified.reason}]`);
-          }
-        } catch (err) {
-          const classified = classifyError(1, err.message);
-          recordEngineFailure('puter', classified, config);
-          errors.push(`puter (${err.message})`);
-          pathSteps.push(`puter(flash) [FAIL: ${err.message}]`);
-        }
-      }
-    }
   } else if (targetEngine === 'codex') {
     if (!choices.includes('codex')) choices.push('codex');
-    // \u2500\u2500 3. Hedef Motor Codex ise: Codex -> Muse -> Puter -> Gemini \u2500\u2500
+    // Codex -> Muse -> Gemini
     const codexGate = canExecuteEngine('codex', config);
     if (!codexGate.allowed) {
       console.warn(`[AI Factory Pre-Flight Gate] \u26d4 Codex motoru karantinada (${codexGate.reason}).`);
@@ -1197,38 +952,6 @@ Kullan\u0131m:
       }
     }
 
-    // Muse de ba\u015far\u0131s\u0131z olursa -> Puter 0$ Flash'a devret
-    if (!succeedWith && options.engine !== 'aborted' && !options.noFallback) {
-      if (!choices.includes('puter')) choices.push('puter');
-      console.warn(`\n[AI Factory Fallback] Muse de ba\u015far\u0131s\u0131z oldu. Puter (0$ Flash) deneniyor...`);
-      const puterGate = canExecuteEngine('puter', config);
-      if (!puterGate.allowed) {
-        pathSteps.push('puter(flash) [QUARANTINED]');
-        errors.push(`puter (quarantined: ${puterGate.reason})`);
-      } else {
-        try {
-          const res = await executePuter(options.task, 'flash', options.cwd, null, config);
-          lastOutput = res.output;
-          if (res.exitCode === 0 && !res.watchdogTimeout && res.output.trim().length > 0) {
-            succeedWith = 'puter-flash';
-            recordEngineSuccess('puter', config);
-            targetEngine = 'puter';
-            targetModel = 'flash';
-            pathSteps.push('puter(flash) [OK]');
-          } else {
-            const classified = classifyError(res.exitCode, res.output, res);
-            recordEngineFailure('puter', classified, config);
-            errors.push(`puter-flash (${classified.reason})`);
-            pathSteps.push(`puter(flash) [FAIL: ${classified.reason}]`);
-          }
-        } catch (err) {
-          const classified = classifyError(1, err.message);
-          recordEngineFailure('puter', classified, config);
-          errors.push(`puter (${err.message})`);
-          pathSteps.push(`puter(flash) [FAIL: ${err.message}]`);
-        }
-      }
-    }
   }
 
   // --no-fallback also prevents reporting a successful Gemini handoff on failure.
