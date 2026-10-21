@@ -34,6 +34,10 @@ loads it, against a contenteditable with the same placeholder and a send button 
       .editor { flex: 1; min-height: 24px; outline: none; color: #c9d1d9; }
       .editor:empty::before { content: attr(aria-label); color: #6e7681; }`;
 
+    if (new URLSearchParams(location.search).get('light') === '1') {
+      document.body.style.background = '#ffffff';
+      document.body.style.color = '#24292f';
+    }
     const host = document.getElementById('host');
     let scope;
     if (new URLSearchParams(location.search).get('shadow') === '1') {

@@ -32,10 +32,9 @@ const STYLES = `
 #${BAR_ID} .aif-select:disabled { opacity: 0.5; cursor: default; }
 #${BAR_ID} .aif-select[hidden] { display: none; }
 #${BAR_ID} .aif-hint { color: #6e7681; font-size: 11px; }
-@media (prefers-color-scheme: light) {
-  #${BAR_ID} { color: #24292f; }
-  #${BAR_ID} .aif-select { background: #fff; border-color: #d0d7de; color: #24292f; }
-}
+#${BAR_ID}[data-theme="light"] { color: #24292f; }
+#${BAR_ID}[data-theme="light"] .aif-select { background: #fff; border-color: #d0d7de; color: #24292f; }
+#${BAR_ID}[data-theme="light"] .aif-hint { color: #57606a; }
 `;
 
 const state = Object.assign({ enabled: true, engine: 'auto', model: '', effort: '' }, readStoredState());
@@ -238,9 +237,22 @@ function fillEffort(select) {
   for (const level of levels) select.append(option(level, level, level === state.effort));
 }
 
-function buildBar() {
+// The app decides its own theme, so look at what is actually painted behind the bar.
+function surfaceTheme(element) {
+  for (let node = element; node && node.nodeType === Node.ELEMENT_NODE; node = node.parentNode || node.getRootNode?.().host) {
+    const match = getComputedStyle(node).backgroundColor.match(/rgba?\(([^)]+)\)/);
+    if (!match) continue;
+    const [r, g, b, a = 1] = match[1].split(',').map(Number);
+    if (a < 0.1) continue;
+    return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 > 0.55 ? 'light' : 'dark';
+  }
+  return 'dark';
+}
+
+function buildBar(theme) {
   const bar = document.createElement('div');
   bar.id = BAR_ID;
+  bar.dataset.theme = theme;
 
   const toggle = document.createElement('button');
   toggle.type = 'button';
@@ -315,7 +327,7 @@ function mount() {
     existing.remove();
   }
   ensureStyles(root);
-  parent.insertBefore(buildBar(), composer);
+  parent.insertBefore(buildBar(surfaceTheme(composer)), composer);
   debug('bar mounted', { editor, sendButton, composer, inShadowRoot: root instanceof ShadowRoot });
 }
 
