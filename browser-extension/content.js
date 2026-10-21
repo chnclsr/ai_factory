@@ -4,37 +4,74 @@
 //
 // Google's markup is minified and changes between deployments, so nothing here depends on their
 // class names: the editor is found by its placeholder text and the send button by its position
-// next to that editor.
+// next to that editor. The search walks into shadow roots, which a plain querySelectorAll cannot
+// see, and the bar carries its own stylesheet so it looks right wherever it ends up.
+//
+// Set localStorage['ai-factory-picker-debug'] = '1' to log what each search found.
 
 const STORAGE_KEY = 'ai-factory-picker';
-const EDITOR_HINT = /ask anything|@ to mention/i;
+const DEBUG_KEY = 'ai-factory-picker-debug';
+const EDITOR_HINT = /ask anything|@ to mention|\/ for actions/i;
 const BAR_ID = 'ai-factory-bar';
 
-const state = Object.assign(
-  { enabled: true, engine: 'auto', model: '', effort: '' },
-  readStoredState()
-);
+const STYLES = `
+#${BAR_ID} {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  margin: 0 0 6px; padding: 4px 2px;
+  font: 12px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; color: #c9d1d9;
+}
+#${BAR_ID} .aif-toggle {
+  padding: 3px 10px; border: 1px solid #3fb950; border-radius: 999px;
+  background: rgba(63, 185, 80, 0.14); color: #3fb950; font: inherit; font-weight: 600; cursor: pointer;
+}
+#${BAR_ID} .aif-toggle.aif-off { border-color: #6e7681; background: transparent; color: #8b949e; }
+#${BAR_ID} .aif-select {
+  max-width: 230px; padding: 3px 6px; border: 1px solid #30363d; border-radius: 6px;
+  background: #161b22; color: #c9d1d9; font: inherit; cursor: pointer;
+}
+#${BAR_ID} .aif-select:disabled { opacity: 0.5; cursor: default; }
+#${BAR_ID} .aif-select[hidden] { display: none; }
+#${BAR_ID} .aif-hint { color: #6e7681; font-size: 11px; }
+@media (prefers-color-scheme: light) {
+  #${BAR_ID} { color: #24292f; }
+  #${BAR_ID} .aif-select { background: #fff; border-color: #d0d7de; color: #24292f; }
+}
+`;
+
+const state = Object.assign({ enabled: true, engine: 'auto', model: '', effort: '' }, readStoredState());
 
 function readStoredState() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-  } catch {
-    return {};
-  }
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch { return {}; }
 }
 
 function saveState() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch {
-    // Private windows and blocked site data are fine; the bar just stops remembering.
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch { /* private window */ }
+}
+
+let debugEnabled = false;
+try { debugEnabled = localStorage.getItem(DEBUG_KEY) === '1'; } catch { /* ignore */ }
+function debug(...args) {
+  if (debugEnabled) console.log('[AI Factory]', ...args);
+}
+
+// ── Finding the composer ──────────────────────────────────────────────────────────────────
+
+// querySelectorAll stops at a shadow boundary, and this app may render the composer inside one.
+function deepQueryAll(selector, root = document, found = [], seen = new Set()) {
+  if (seen.has(root)) return found;
+  seen.add(root);
+  for (const element of root.querySelectorAll('*')) {
+    if (element.matches(selector)) found.push(element);
+    if (element.shadowRoot) deepQueryAll(selector, element.shadowRoot, found, seen);
   }
+  return found;
 }
 
 function placeholderOf(element) {
   return element.getAttribute('placeholder') ||
     element.getAttribute('aria-label') ||
-    element.getAttribute('data-placeholder') || '';
+    element.getAttribute('data-placeholder') ||
+    element.getAttribute('aria-placeholder') || '';
 }
 
 function isVisible(element) {
@@ -43,26 +80,15 @@ function isVisible(element) {
 }
 
 function findEditor() {
-  const candidates = [...document.querySelectorAll('textarea, [contenteditable="true"]')].filter(isVisible);
+  const candidates = deepQueryAll('textarea, [contenteditable="true"], [contenteditable=""], [role="textbox"]')
+    .filter(isVisible);
   if (candidates.length === 0) return null;
   const labelled = candidates.find(element => EDITOR_HINT.test(placeholderOf(element)) ||
-    EDITOR_HINT.test(element.parentElement?.textContent?.slice(0, 80) || ''));
+    EDITOR_HINT.test(element.parentElement?.textContent?.slice(0, 120) || '') ||
+    EDITOR_HINT.test(element.closest('[aria-label]')?.getAttribute('aria-label') || ''));
   if (labelled) return labelled;
   // Otherwise take the lowest one on screen, which is where a chat composer sits.
   return candidates.sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top).pop();
-}
-
-function findSendButton(editor) {
-  let scope = editor.parentElement;
-  for (let depth = 0; depth < 6 && scope; depth++) {
-    const buttons = [...scope.querySelectorAll('button')].filter(isButtonVisible);
-    const labelled = buttons.find(button => /send|gönder|submit/i.test(
-      button.getAttribute('aria-label') || button.getAttribute('title') || ''));
-    if (labelled) return labelled;
-    if (buttons.length > 0 && depth > 0) return buttons[buttons.length - 1];
-    scope = scope.parentElement;
-  }
-  return null;
 }
 
 function isButtonVisible(button) {
@@ -70,16 +96,30 @@ function isButtonVisible(button) {
   return rect.width > 0 && rect.height > 0 && !button.disabled;
 }
 
-function composerOf(editor, sendButton) {
-  let scope = editor.parentElement;
-  while (scope && scope !== document.body) {
-    if (!sendButton || scope.contains(sendButton)) {
-      const rect = scope.getBoundingClientRect();
-      if (rect.width > 240) return scope;
-    }
-    scope = scope.parentElement;
+function findSendButton(editor) {
+  let scope = editor.parentElement || editor.getRootNode().host;
+  for (let depth = 0; depth < 6 && scope; depth++) {
+    const buttons = deepQueryAll('button, [role="button"]', scope).filter(isButtonVisible);
+    const labelled = buttons.find(button => /send|gönder|submit/i.test(
+      button.getAttribute('aria-label') || button.getAttribute('title') || ''));
+    if (labelled) return labelled;
+    if (buttons.length > 0 && depth > 0) return buttons[buttons.length - 1];
+    scope = scope.parentElement || scope.getRootNode?.()?.host;
   }
-  return editor.parentElement;
+  return null;
+}
+
+// Walks with parentNode, not parentElement: inside a shadow root the top element's
+// parentElement is null because its parent is the ShadowRoot itself.
+function composerOf(editor, sendButton) {
+  let scope = editor.parentNode;
+  while (scope && scope !== document.body && scope.nodeType === Node.ELEMENT_NODE) {
+    if (!sendButton || scope.contains(sendButton)) {
+      if (scope.getBoundingClientRect().width > 240) return scope;
+    }
+    scope = scope.parentNode;
+  }
+  return editor.parentNode?.nodeType === Node.ELEMENT_NODE ? editor.parentNode : editor;
 }
 
 // ── The instruction added to the prompt ───────────────────────────────────────────────────
@@ -111,7 +151,7 @@ function insertAtStart(editor, text) {
     const range = document.createRange();
     range.setStart(editor, 0);
     range.collapse(true);
-    const selection = window.getSelection();
+    const selection = (editor.getRootNode().getSelection?.() || window.getSelection());
     selection.removeAllRanges();
     selection.addRange(range);
   }
@@ -124,7 +164,7 @@ function injectThenSubmit(editor, submit) {
   const directive = buildDirective();
   if (!directive || submitting || !editorText(editor)) return false;
   if (editorText(editor).startsWith('[AI Factory]')) return false;
-  if (!insertAtStart(editor, directive)) return false;
+  if (!insertAtStart(editor, directive)) { debug('insertText was refused'); return false; }
   submitting = true;
   setTimeout(() => {
     try { submit(); } finally { setTimeout(() => { submitting = false; }, 300); }
@@ -132,17 +172,22 @@ function injectThenSubmit(editor, submit) {
   return true;
 }
 
-function activeEditor() {
+// A listener on document sees events from inside a shadow root retargeted to the host;
+// composedPath()[0] is the element the event actually started on.
+function realTarget(event) {
+  return event.composedPath?.()[0] || event.target;
+}
+
+function activeEditorFor(node) {
   const editor = findEditor();
   if (!editor) return null;
-  const active = document.activeElement;
-  return editor === active || editor.contains(active) ? editor : null;
+  return editor === node || editor.contains(node) ? editor : null;
 }
 
 document.addEventListener('keydown', event => {
   if (event.key !== 'Enter' || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return;
   if (event.isComposing || event.keyCode === 229) return;
-  const editor = activeEditor();
+  const editor = activeEditorFor(realTarget(event));
   if (!editor) return;
   if (!injectThenSubmit(editor, () => {
     const button = findSendButton(editor);
@@ -154,11 +199,12 @@ document.addEventListener('keydown', event => {
 }, true);
 
 document.addEventListener('click', event => {
-  const button = event.target.closest?.('button');
-  if (!button || submitting) return;
+  if (submitting) return;
+  const clicked = realTarget(event).closest?.('button, [role="button"]');
+  if (!clicked) return;
   const editor = findEditor();
-  if (!editor || button !== findSendButton(editor)) return;
-  if (!injectThenSubmit(editor, () => button.click())) return;
+  if (!editor || clicked !== findSendButton(editor)) return;
+  if (!injectThenSubmit(editor, () => clicked.click())) return;
   event.preventDefault();
   event.stopImmediatePropagation();
 }, true);
@@ -211,7 +257,6 @@ function buildBar() {
   modelSelect.className = 'aif-select aif-model';
   const effortSelect = document.createElement('select');
   effortSelect.className = 'aif-select';
-
   const hint = document.createElement('span');
   hint.className = 'aif-hint';
 
@@ -225,11 +270,7 @@ function buildBar() {
     hint.textContent = routed ? '' : 'chain: ' + AI_FACTORY_MODELS.chain.join(' → ');
   }
 
-  toggle.addEventListener('click', () => {
-    state.enabled = !state.enabled;
-    saveState();
-    render();
-  });
+  toggle.addEventListener('click', () => { state.enabled = !state.enabled; saveState(); render(); });
   engineSelect.addEventListener('change', () => {
     state.engine = engineSelect.value;
     state.model = '';
@@ -249,23 +290,43 @@ function buildBar() {
   return bar;
 }
 
+// The bar can land inside a shadow root, where the manifest's stylesheet does not reach.
+function ensureStyles(root) {
+  const host = root instanceof ShadowRoot ? root : document.head;
+  if (!host || host.querySelector('style[data-ai-factory]')) return;
+  const style = document.createElement('style');
+  style.dataset.aiFactory = '1';
+  style.textContent = STYLES;
+  host.append(style);
+}
+
 function mount() {
   const editor = findEditor();
-  if (!editor) return;
-  const composer = composerOf(editor, findSendButton(editor));
-  if (!composer || !composer.parentElement) return;
-  const existing = document.getElementById(BAR_ID);
+  if (!editor) { debug('no editor found yet'); return; }
+  const sendButton = findSendButton(editor);
+  const composer = composerOf(editor, sendButton);
+  // parentNode, so the bar can also be inserted directly into a shadow root.
+  const parent = composer?.parentNode;
+  if (!parent) { debug('no composer container around', editor); return; }
+  const root = composer.getRootNode();
+  const existing = root.querySelector?.('#' + BAR_ID);
   if (existing) {
     if (existing.nextElementSibling === composer) return;
     existing.remove();
   }
-  composer.parentElement.insertBefore(buildBar(), composer);
+  ensureStyles(root);
+  parent.insertBefore(buildBar(), composer);
+  debug('bar mounted', { editor, sendButton, composer, inShadowRoot: root instanceof ShadowRoot });
 }
 
 let pending = null;
-const observer = new MutationObserver(() => {
+function scheduleMount() {
   clearTimeout(pending);
   pending = setTimeout(mount, 300);
-});
-observer.observe(document.body, { childList: true, subtree: true });
+}
+
+new MutationObserver(scheduleMount).observe(document.documentElement, { childList: true, subtree: true });
+// A single-page app can finish rendering without further mutations, so poll briefly as well.
+setInterval(() => { if (!document.querySelector('#' + BAR_ID)) scheduleMount(); }, 3000);
 mount();
+debug('content script loaded on', location.href);

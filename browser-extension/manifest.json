@@ -5,9 +5,13 @@
   "description": "Choose the AI Factory engine, model and reasoning effort above Antigravity's prompt box; the choice is added to the prompt on send.",
   "content_scripts": [
     {
-      "matches": ["https://antigravity.google.com/*"],
-      "js": ["models.js", "content.js"],
-      "css": ["styles.css"],
+      "matches": [
+        "https://antigravity.google.com/*"
+      ],
+      "js": [
+        "models.js",
+        "content.js"
+      ],
       "run_at": "document_idle",
       "all_frames": true
     }

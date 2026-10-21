@@ -50,11 +50,19 @@ open the harness:
 npx --yes http-server browser-extension -p 8731
 ```
 
-Then open `http://127.0.0.1:8731/test/harness.html`. Sent messages are appended to `window.__sent`.
+Then open `http://127.0.0.1:8731/test/harness.html`. Add `?shadow=1` to render the composer inside
+a shadow root. Sent messages are appended to `window.__sent`.
 
-## If the bar stops appearing
+## If the bar does not appear
+
+1. On `brave://extensions`, press the reload icon on this extension, then hard-reload the
+   Antigravity tab (Ctrl+Shift+R). Editing the files does not update a loaded extension.
+2. Turn on logging: open DevTools on the Antigravity tab, run
+   `localStorage.setItem('ai-factory-picker-debug', '1')` in the Console, and reload.
+   Lines starting with `[AI Factory]` show what the script found.
 
 Google's markup is minified and changes between deployments. Nothing here depends on their class
 names: the editor is found by its placeholder text (`Ask anything, @ to mention…`) and the send
-button by its position next to that editor. If either changes, update `EDITOR_HINT` and
-`findSendButton` in `content.js`.
+button by its position next to that editor. The search walks into shadow roots, and the bar
+carries its own stylesheet so it renders correctly inside one. If the placeholder or the button
+layout changes, update `EDITOR_HINT` and `findSendButton` in `content.js`.

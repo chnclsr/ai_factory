@@ -9,7 +9,6 @@ loads it, against a contenteditable with the same placeholder and a send button 
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Composer harness</title>
-  <link rel="stylesheet" href="../styles.css">
   <style>
     body { background: #0d1117; color: #c9d1d9; font-family: system-ui, sans-serif; padding: 24px; }
     .outer { max-width: 760px; }
@@ -20,19 +19,35 @@ loads it, against a contenteditable with the same placeholder and a send button 
   </style>
 </head>
 <body>
-  <div class="outer">
-    <div class="composer">
-      <div class="editor" contenteditable="true" aria-label="Ask anything, @ to mention, / for actions"></div>
-      <button aria-label="Send">&rarr;</button>
-    </div>
-  </div>
+  <!-- Add ?shadow=1 to render the same composer inside a shadow root. -->
+  <div class="outer"><div id="host"></div></div>
   <div id="sent"></div>
 
   <script>
+    const COMPOSER = `
+      <div class="composer">
+        <div class="editor" contenteditable="true" aria-label="Ask anything, @ to mention, / for actions"></div>
+        <button aria-label="Send">&rarr;</button>
+      </div>`;
+    const SHADOW_STYLES = `
+      .composer { display: flex; align-items: center; gap: 8px; border: 1px solid #30363d; border-radius: 12px; padding: 10px; }
+      .editor { flex: 1; min-height: 24px; outline: none; color: #c9d1d9; }
+      .editor:empty::before { content: attr(aria-label); color: #6e7681; }`;
+
+    const host = document.getElementById('host');
+    let scope;
+    if (new URLSearchParams(location.search).get('shadow') === '1') {
+      scope = host.attachShadow({ mode: 'open' });
+      scope.innerHTML = `<style>${SHADOW_STYLES}</style>${COMPOSER}`;
+    } else {
+      host.innerHTML = COMPOSER;
+      scope = document;
+    }
+
     // Stands in for the page's own send handling.
     window.__sent = [];
-    const editor = document.querySelector('.editor');
-    const send = document.querySelector('button[aria-label="Send"]');
+    const editor = scope.querySelector('.editor');
+    const send = scope.querySelector('button[aria-label="Send"]');
     send.addEventListener('click', () => {
       window.__sent.push(editor.innerText);
       document.getElementById('sent').textContent = 'SENT: ' + editor.innerText;
