@@ -53,6 +53,15 @@ npx --yes http-server browser-extension -p 8731
 Then open `http://127.0.0.1:8731/test/harness.html`. Add `?shadow=1` to render the composer inside
 a shadow root. Sent messages are appended to `window.__sent`.
 
+## Where the script runs
+
+antigravity.google.com is only a shell. The chat itself is rendered in an iframe from
+`https://antigravity.static.usercontent.goog/web/cli-<version>/?iframe=true`, a different origin,
+so the manifest matches both hosts and `all_frames` is on. Content scripts only run on origins the
+manifest lists; if Google moves the UI to another host, add it to `matches`. In DevTools the
+Console runs in the top frame by default; pick the usercontent.goog frame in the context
+dropdown (`top`) to inspect the real UI.
+
 ## If the bar does not appear
 
 1. On `brave://extensions`, press the reload icon on this extension, then hard-reload the
