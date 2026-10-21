@@ -9,6 +9,7 @@ Run {{ROUTER_COMMAND}} --task "<request>" --cwd "<working directory>".
 Options:
 - --engine puter --model flash: routine work.
 - --engine puter --model pro: complex work.
+Puter runs the bundled Node agent against the local bridge and saves its own conversation history. Command execution is disabled by default; do not claim tests were run unless the execution output confirms them.
 - --engine muse: contributor model.
 - --engine codex --model <available-model>: explicit Codex request.
 - --engine opencode --model <free-model>: OpenCode's configured free models; defaults to deepseek-v4.1-flash-free.

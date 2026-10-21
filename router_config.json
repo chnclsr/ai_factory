@@ -4,8 +4,12 @@
   "description": "Antigravity minimal token harcar, agir isleri Puter ve Codex'e delege eder.",
   "engines": {
     "puter": {
-      "type": "dsh",
+      "type": "puter_agent",
       "base_url": "http://localhost:8080",
+      "agent": {
+        "max_turns": 32,
+        "allow_commands": false
+      },
       "cost_usd": 0.0,
       "models": {
         "flash": {

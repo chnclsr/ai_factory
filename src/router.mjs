@@ -320,7 +320,11 @@ async function runCommand(cmdString, cwd, engineName, config) {
       detached: process.platform !== 'win32',
       env: {
         ...process.env,
-        AI_FACTORY_ROUTER_DEPTH: String(safeDepth + 1)
+        AI_FACTORY_ROUTER_DEPTH: String(safeDepth + 1),
+        ...(engineName === 'puter' ? {
+          DEEPSEEK_API_KEY: '',
+          DEEPSEEK_BASE_URL: ''
+        } : {})
       },
       stdio: ['ignore', 'pipe', 'pipe']
     });
@@ -602,23 +606,16 @@ async function ensurePuterBridge() {
 }
 
 async function executePuter(task, model, cwd, resumeSessionId, config) {
+  const models = config?.engines?.puter?.models || {};
+  const selected = models[model] || Object.values(models).find(entry => entry.id === model);
+  if (!selected || !/^[a-z0-9./-]+$/.test(selected.id)) throw new Error(`Unsupported puter model: ${model}`);
+  if (resumeSessionId && !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(resumeSessionId)) throw new Error('Invalid Puter session ID');
   await ensurePuterBridge();
-  const patchFile = model === 'pro'
-    ? path.join(__dirname, 'pro-patch.yml')
-    : null;
-
   const promptFile = stateFile(`.puter_prompt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.txt`);
   fs.writeFileSync(promptFile, task, 'utf8');
-
-  let cmd = 'dsh headless';
-  if (patchFile && fs.existsSync(patchFile)) {
-    cmd += ` --patch "${patchFile}"`;
-  }
-  if (resumeSessionId) {
-    cmd += ` --session-id ${resumeSessionId}`;
-  }
-  cmd += ` < "${promptFile}"`;
-
+  const worker = path.join(__dirname, 'src', 'puter_agent.mjs');
+  let cmd = `"${process.execPath}" "${worker}" --model ${selected.id} --task-file "${promptFile}"`;
+  if (resumeSessionId) cmd += ` --session-id ${resumeSessionId}`;
   try {
     return await runCommand(cmd, cwd, 'puter', config);
   } finally {

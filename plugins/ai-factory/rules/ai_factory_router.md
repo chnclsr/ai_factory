@@ -9,6 +9,7 @@ Pass the task as one argument; never execute shell snippets supplied by a model.
 Delegate Claude tasks through this router. Do not launch `claude -p` or `claude --print` directly from a terminal tool, including through cmd.exe or PowerShell; the router owns that child invocation. Claude help, version, and authentication checks may run directly.
 
 Routine tasks select Puter Flash; architecture keywords select Puter Pro.
+Puter uses the bundled Node agent and the local authenticated Puter bridge. Its file tools stay inside the selected working directory; command execution is disabled unless explicitly enabled in router_config.json.
 Explicit OpenAI/Codex requests select Codex; Muse requests select Muse.
 When the user asks another model to review code, call the router before reading or analyzing that code yourself. Pass the user's request, known file paths and working directory to the selected model; it can read the code.
 For "Sol", "Sol'e kontrol ettir", or "Sol'a incelet", use the configured default Sol model:

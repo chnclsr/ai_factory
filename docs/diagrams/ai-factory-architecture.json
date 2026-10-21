@@ -19,7 +19,7 @@
     { "id": "router", "type": "backend", "label": "AI Factory Router", "sublabel": "Select, run, report", "row": 2, "col": 2 },
     { "id": "policy", "type": "security", "label": "Model policy", "sublabel": "Allowlist and cost", "row": 0, "col": 2 },
     { "id": "registry", "type": "database", "label": "Local state", "sublabel": "Sessions and health", "row": 4, "col": 2 },
-    { "id": "puter", "type": "backend", "label": "Puter bridge", "sublabel": "dsh + local service", "row": 0, "col": 4 },
+    { "id": "puter", "type": "backend", "label": "Puter bridge", "sublabel": "Agent + local service", "row": 0, "col": 4 },
     { "id": "muse", "type": "external", "label": "Muse CLI", "sublabel": "Contributor model", "row": 1, "col": 4 },
     { "id": "codex", "type": "external", "label": "Codex CLI", "sublabel": "Configured account", "row": 2, "col": 4 },
     { "id": "opencode", "type": "external", "label": "OpenCode CLI", "sublabel": "Allowed free models", "row": 3, "col": 4 },

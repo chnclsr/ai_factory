@@ -1,6 +1,0 @@
-- id: agent-default-model
-  name: "@deepseek-ai/dsh-agent-default-model"
-  config:
-    provider: deepseek-official
-    model: deepseek-reasoner
-    reasoningEffort: high

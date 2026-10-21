@@ -397,7 +397,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // Anthropic Messages API (for DSH Messages wire format)
+  // Anthropic Messages API compatibility endpoint
   if (req.method === 'POST' && (url === '/v1/messages' || url === '/messages')) {
     if (!currentToken) {
       res.writeHead(401, { 'Content-Type': 'application/json' });

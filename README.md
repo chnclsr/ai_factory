@@ -35,7 +35,7 @@ AGY is instructed to inspect actual progress while a long task runs. If its time
 
 | Tool (`--engine`) | CLI used | Default model | Model names accepted with `--model` |
 |---|---|---|---|
-| Puter (`puter`) | `dsh headless` through the local bridge | `flash` | `flash`, `pro`; see the Puter model note below |
+| Puter (`puter`) | Native Node agent through the local Puter bridge | `flash` | `flash`, `pro`, `r1` |
 | Muse (`muse`) | `muse exec` | `muse-spark-1.3-contributor` | Fixed to `muse-spark-1.3-contributor`; contributor mode is always enabled |
 | Codex (`codex`) | `codex exec` | `gpt-6.1-sol` | `gpt-6-luna`, `gpt-5.6-luna`, `gpt-6.1-sol`, `gpt-6-sol`, `gpt-5.6-terra`, `gpt-5.6-sol`, `gpt-5.5`, `gpt-6-astra` |
 | OpenCode (`opencode`) | `opencode run` | `deepseek-v4.1-flash-free` | The 12 configured free models listed below |
@@ -72,7 +72,9 @@ Paid OpenCode models are rejected by the router.
 
 </details>
 
-**Puter model selection:** `flash` uses the model already configured in DeepSeek Harness (`dsh`). `pro` applies the bundled [pro-patch.yml](pro-patch.yml), which selects `deepseek-reasoner`. The configuration also lists `r1`, but the launcher has no separate R1 override: `--model r1` follows the default `dsh` path and does not guarantee an R1 request.
+**Puter model selection:** The bundled Node agent calls the local bridge directly. `flash`, `pro`, and `r1` use their configured Puter model mappings. Authentication belongs to the Puter account; the worker sends no DeepSeek API key.
+
+The Puter agent can list, read, write, and edit files inside its working directory, and saves conversations for `--resume`. Private paths and symlinks escaping the workspace are rejected. Command execution is off by default; `engines.puter.agent.allow_commands` enables argument-array commands with a 30-second limit. Those commands run with the host user's OS permissions; the file-tool workspace checks do not sandbox commands. `max_turns` limits each request (default 32).
 
 These are the router's configured choices. Availability, quota, and charges depend on your provider account. See [Usage](#usage) for examples for each tool.
 
@@ -104,6 +106,7 @@ ai_factory/
 │   └── diagrams/              # Interactive architecture and workflow diagrams
 ├── src/                       # Core implementation modules
 │   ├── router.mjs
+│   ├── puter_agent.mjs         # Native Puter tool loop and saved conversations
 │   ├── server.mjs
 │   └── quota_tracker.mjs
 ├── lib/                       # Path resolution and plugin utilities
@@ -137,7 +140,7 @@ ai_factory/
 | Antigravity integration | Antigravity CLI (`agy`) or Antigravity IDE |
 | OpenCode tasks | OpenCode CLI installed and signed in to a provider with the selected free model |
 | Claude tasks | Claude Code CLI installed and signed in; your account may incur charges |
-| Puter tasks | DeepSeek Harness (`dsh`) installed and configured, plus an authenticated local Puter bridge: start it with `npm start`, then open `http://127.0.0.1:8080` to sign in |
+| Puter tasks | Node.js and an authenticated local Puter bridge: start it with `npm start`, then open `http://127.0.0.1:8080` to sign in |
 | Muse tasks | Muse CLI (`muse`) installed and signed in with access to `muse-spark-1.3-contributor` |
 | Codex tasks | Codex CLI (`codex`) installed and signed in with access to the requested model |
 
