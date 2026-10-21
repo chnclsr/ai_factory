@@ -1,0 +1,48 @@
+<!doctype html>
+<!--
+Development harness: a stand-in for Antigravity's composer so the content script can be tried
+without signing in. Open this file in a browser; content.js is loaded the way the extension
+loads it, against a contenteditable with the same placeholder and a send button beside it.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Composer harness</title>
+  <link rel="stylesheet" href="../styles.css">
+  <style>
+    body { background: #0d1117; color: #c9d1d9; font-family: system-ui, sans-serif; padding: 24px; }
+    .outer { max-width: 760px; }
+    .composer { display: flex; align-items: center; gap: 8px; border: 1px solid #30363d; border-radius: 12px; padding: 10px; }
+    .editor { flex: 1; min-height: 24px; outline: none; }
+    .editor:empty::before { content: attr(aria-label); color: #6e7681; }
+    #sent { margin-top: 16px; color: #3fb950; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <div class="outer">
+    <div class="composer">
+      <div class="editor" contenteditable="true" aria-label="Ask anything, @ to mention, / for actions"></div>
+      <button aria-label="Send">&rarr;</button>
+    </div>
+  </div>
+  <div id="sent"></div>
+
+  <script>
+    // Stands in for the page's own send handling.
+    window.__sent = [];
+    const editor = document.querySelector('.editor');
+    const send = document.querySelector('button[aria-label="Send"]');
+    send.addEventListener('click', () => {
+      window.__sent.push(editor.innerText);
+      document.getElementById('sent').textContent = 'SENT: ' + editor.innerText;
+      editor.innerHTML = '';
+    });
+    editor.addEventListener('keydown', event => {
+      if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); send.click(); }
+    });
+  </script>
+  <script src="../models.js"></script>
+  <script src="../content.js"></script>
+</body>
+</html>

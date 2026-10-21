@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "AI Factory model picker",
+  "version": "1.0.0",
+  "description": "Choose the AI Factory engine, model and reasoning effort above Antigravity's prompt box; the choice is added to the prompt on send.",
+  "content_scripts": [
+    {
+      "matches": ["https://antigravity.google.com/*"],
+      "js": ["models.js", "content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ]
+}

@@ -13,7 +13,7 @@
     "quota": "node quota_tracker.mjs",
     "deploy": "node deploy_skill.mjs",
     "test": "node --test",
-    "check": "node scripts/check.mjs"
+    "check": "node scripts/check.mjs",
+    "build:extension": "node scripts/build-extension.mjs"
   }
 }
-
