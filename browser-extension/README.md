@@ -1,9 +1,9 @@
 # AI Factory model picker (browser extension)
 
-Adds an engine / model / effort bar above the prompt box on
-[antigravity.google.com](https://antigravity.google.com). Your choice is turned into a one-line
-instruction that is placed in front of the prompt when you send it, so the agent routes the task
-through the AI Factory router with exactly that engine and model.
+Adds an actor / critic bar above the prompt box on
+[antigravity.google.com](https://antigravity.google.com). Your choices are turned into an
+instruction that is placed in front of the prompt when you send it, so the agent routes the work
+through the AI Factory router with exactly those engines and models.
 
 The Antigravity web UI is served by Google, so its own source cannot be changed. This extension
 only alters what your browser renders and what your prompt says; nothing is sent anywhere else.
@@ -19,18 +19,35 @@ The bar appears directly above the prompt box. Selections are remembered per bro
 
 ## Using it
 
-| Control | What it does |
-|---|---|
-| `AI Factory: on/off` | Off sends your prompt untouched. |
-| Engine | `auto` adds nothing and lets the router use its free chain. Any other engine is passed as `--engine`. |
-| Model | The models the router accepts for that engine, straight from `router_config.json`. |
-| Effort | Only shown for Claude, which is the one engine whose CLI takes `--reasoning-effort`. `auto` leaves the choice to the router. |
+Two rows, each with an on/off switch, an engine, a model and (for Claude) an effort level.
 
-With `claude` / `opus-5.5` / `high` selected, typing `mimariyi incele` and sending produces:
+| Row | Role | Default |
+|---|---|---|
+| **Actor** | Does the task. | **On**: `opencode` / `deepseek-v4.1-flash-free` |
+| **Critic** | Reviews what the actor did. | **Off**: `claude` / `opus-5.5` at `high` effort |
+
+Engine `auto` (actor only) adds no engine flags and lets the router use its free chain. Models
+come straight from `router_config.json`. Effort is only offered for Claude, the one engine whose
+CLI takes `--reasoning-effort`.
+
+| Actor | Critic | What the agent is told |
+|---|---|---|
+| on | off | Delegate the task to the actor, report the router's execution report. |
+| on | on | Delegate to the actor; when it is done, delegate a review to the critic with the original task, the actor's result and the changed file paths; report both execution reports and the verdict. Fixes are not applied unless you ask. |
+| off | on | Do the task yourself, then delegate the review to the critic. |
+| off | off | Your prompt is sent untouched. |
+
+With the defaults and the critic switched on, sending `testi calistir` produces:
 
 ```
-[AI Factory] Delegate this task through the AI Factory router with --engine claude --model opus-5.5 --reasoning-effort high --no-fallback, and report the router's execution report. Task: mimariyi incele
+[AI Factory] Actor-critic, in this order. 1) Actor: delegate the task through the AI Factory router with --engine opencode --model deepseek-v4.1-flash-free --no-fallback. 2) Critic: once the actor is done, delegate a review through the router with --engine claude --model opus-5.5 --reasoning-effort high --no-fallback. Give the critic the original task, the actor's reported result and the paths of the files it changed, and ask for a verdict: approve, or a list of concrete problems with file and line. 3) Report both execution reports and the critic's verdict. Do not apply the critic's fixes unless I ask. Task: testi calistir
 ```
+
+The critic is a separate router call, so it costs a Claude Opus 5.5 request on your account each
+time it is on. Switch it off for routine work.
+
+Saved choices that name a model the router no longer offers are dropped on load, so a renamed
+model is never sent.
 
 ## Keeping the model list in sync
 
