@@ -7,10 +7,11 @@ description: Delegate repository analysis, large reads, coding and refactoring t
 Run {{ROUTER_COMMAND}} --task "<request>" --cwd "<working directory>".
 
 Options:
-- Routine work defaults to Muse Contributor; complex work defaults to Codex `gpt-6.1-sol`.
+- Default: free fallback chain `deepseek-v4.1-flash-free` → `mimo-v2.6-flash-free` → `glm-5.3-flash-free` (OpenCode, free) → Muse `muse-spark-1.3-contributor` → Codex `gpt-6-luna`.
+- --model <name>: use the named model first (engine is inferred); add --no-fallback to run only that model.
 - Do not claim tests were run unless the execution output confirms them.
 - --engine muse: contributor model.
-- --engine codex --model <available-model>: explicit Codex request.
+- --engine codex --model gpt-6-luna|gpt-5.6-luna|gpt-5.6-terra: free-tier Codex models only (no Sol/Astra).
 - --engine opencode --model <free-model>: OpenCode's configured free models; defaults to deepseek-v4.1-flash-free.
 - --engine claude --model haiku-5.5|haiku-4.5|sonnet-5|sonnet-5.5|opus-5.5: configured Claude Code models; defaults to Haiku 5.5. Select Opus 5.5 only when the user explicitly requests it.
 - --name <name>: save a named session.

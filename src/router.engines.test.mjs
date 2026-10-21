@@ -108,3 +108,144 @@ syncBuiltinESMExports();
   }
   assert.equal(fs.readFileSync(callsFile, 'utf8').trim().split('\n').length, 10);
 });
+
+test('Default routing walks the free chain and named models are honoured', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-factory-chain-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const mock = path.join(dir, 'mock.mjs');
+  const preload = path.join(dir, 'preload.mjs');
+  const callsFile = path.join(dir, 'calls.jsonl');
+  fs.writeFileSync(mock, `
+import fs from 'node:fs';
+const [engine, command] = process.argv.slice(2);
+const model = (command.match(/--model (\\S+)/) || command.match(/ -m (\\S+)/))[1];
+fs.appendFileSync(process.env.AI_FACTORY_FAKE_CALLS, JSON.stringify({ engine, model }) + '\\n');
+if ((process.env.AI_FACTORY_FAIL || '').split(',').includes(model)) {
+  process.stderr.write('429 rate limit\\n');
+  process.exit(1);
+}
+process.stdout.write(engine === 'opencode'
+  ? JSON.stringify({ type: 'text', sessionID: 'ses_Chain1', part: { text: 'MOCK_OK' } }) + '\\n'
+  : 'MOCK_OK\\n');
+`);
+  fs.writeFileSync(preload, `
+import { createRequire, syncBuiltinESMExports } from 'node:module';
+const childProcess = createRequire(import.meta.url)('node:child_process');
+const realSpawn = childProcess.spawn;
+childProcess.spawn = (command, args, options) => {
+  const engine = typeof command === 'string' && (command.match(/^(opencode|muse|codex|claude)\\b/) || [])[1];
+  if (engine) return realSpawn(process.execPath, [process.env.AI_FACTORY_MOCK, engine, command], { ...options, shell: false });
+  return realSpawn(command, args, options);
+};
+syncBuiltinESMExports();
+`);
+  const env = {
+    ...process.env,
+    NODE_OPTIONS: `${process.env.NODE_OPTIONS || ''} --import=${pathToFileURL(preload).href}`.trim(),
+    AI_FACTORY_MOCK: mock,
+    AI_FACTORY_FAKE_CALLS: callsFile,
+    AI_FACTORY_DATA_DIR: path.join(dir, 'state')
+  };
+  const calls = () => fs.existsSync(callsFile)
+    ? fs.readFileSync(callsFile, 'utf8').trim().split('\n').map(JSON.parse) : [];
+  const run = (fail, ...args) => {
+    fs.rmSync(callsFile, { force: true });
+    fs.rmSync(path.join(dir, 'state'), { recursive: true, force: true });
+    return spawnSync(process.execPath, [router, ...args],
+      { cwd: root, env: { ...env, AI_FACTORY_FAIL: fail }, encoding: 'utf8', timeout: 30000 });
+  };
+
+  let result = run('', '--task', 'Fix the failing test');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.deepEqual(calls().map(c => c.model), ['opencode/deepseek-v4.1-flash-free']);
+
+  result = run('opencode/deepseek-v4.1-flash-free,opencode/mimo-v2.6-flash-free,opencode/glm-5.3-flash-free', '--task', 'Fix it');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.deepEqual(calls().map(c => c.model), ['opencode/deepseek-v4.1-flash-free', 'opencode/mimo-v2.6-flash-free',
+    'opencode/glm-5.3-flash-free', 'muse-spark-1.3-contributor']);
+  assert.match(result.stdout, /succeed_with: muse-spark-1\.3-contributor/);
+
+  result = run('opencode/deepseek-v4.1-flash-free,opencode/mimo-v2.6-flash-free,opencode/glm-5.3-flash-free,muse-spark-1.3-contributor', '--task', 'Fix it');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(calls().at(-1).model, 'gpt-6-luna');
+
+  result = run('', '--task', 'Bunu GLM ile yap');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.deepEqual(calls().map(c => c.model), ['opencode/glm-5.3-flash-free']);
+
+  result = run('gpt-5.6-terra', '--task', 'terra ile incele');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.deepEqual(calls().map(c => c.model).slice(0, 2), ['gpt-5.6-terra', 'opencode/deepseek-v4.1-flash-free']);
+
+  result = run('', '--model', 'nemotron', '--task', 'any');
+  assert.deepEqual(calls().map(c => c.model), ['opencode/nemotron-3-ultra-free']);
+
+  result = run('claude-sonnet-5-5', '--task', 'Use sonnet 5.5 here');
+  assert.deepEqual(calls().map(c => c.model), ['claude-sonnet-5-5']);
+  assert.match(result.stdout, /handoff_to_gemini/);
+
+  result = run('', '--task', 'Solve the metadata issue');
+  assert.deepEqual(calls().map(c => c.model), ['opencode/deepseek-v4.1-flash-free']);
+
+  for (const model of ['gpt-6.1-sol', 'gpt-6-astra', 'sol']) {
+    assert.notEqual(run('', '--engine', 'codex', '--model', model, '--task', 'blocked').status, 0);
+  }
+  assert.equal(calls().length, 0);
+});
+
+test('Claude reasoning effort scales with task complexity and explicit overrides', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-factory-effort-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const mock = path.join(dir, 'mock.mjs');
+  const preload = path.join(dir, 'preload.mjs');
+  const callsFile = path.join(dir, 'calls.jsonl');
+  fs.writeFileSync(mock, `
+import fs from 'node:fs';
+const command = process.argv[3];
+fs.appendFileSync(process.env.AI_FACTORY_FAKE_CALLS, command + '\\n');
+process.stdout.write(JSON.stringify({ type: 'result', session_id: '123e4567-e89b-42d3-a456-426614174000', result: 'MOCK_OK' }) + '\\n');
+`);
+  fs.writeFileSync(preload, `
+import { createRequire, syncBuiltinESMExports } from 'node:module';
+const childProcess = createRequire(import.meta.url)('node:child_process');
+const realSpawn = childProcess.spawn;
+childProcess.spawn = (command, args, options) => {
+  if (typeof command === 'string' && /^claude -p\\b/.test(command)) {
+    return realSpawn(process.execPath, [process.env.AI_FACTORY_MOCK, 'claude', command], { ...options, shell: false });
+  }
+  return realSpawn(command, args, options);
+};
+syncBuiltinESMExports();
+`);
+  const env = {
+    ...process.env,
+    NODE_OPTIONS: `${process.env.NODE_OPTIONS || ''} --import=${pathToFileURL(preload).href}`.trim(),
+    AI_FACTORY_MOCK: mock,
+    AI_FACTORY_FAKE_CALLS: callsFile,
+    AI_FACTORY_DATA_DIR: path.join(dir, 'state')
+  };
+  const run = (...args) => {
+    fs.rmSync(callsFile, { force: true });
+    return spawnSync(process.execPath, [router, '--engine', 'claude', '--model', 'haiku-5.5', '--no-fallback', ...args],
+      { cwd: root, env, encoding: 'utf8', timeout: 15000 });
+  };
+  const lastCmd = () => fs.readFileSync(callsFile, 'utf8').trim();
+
+  let result = run('--task', 'Reply with exactly: PONG');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(lastCmd(), / --effort medium\b/);
+
+  result = run('--task', 'Review this architecture and refactor it');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(lastCmd(), / --effort high\b/);
+
+  result = run('--task', 'This is routine, but use max effort anyway');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(lastCmd(), / --effort max\b/);
+
+  result = run('--reasoning-effort', 'xhigh', '--task', 'Reply with exactly: PONG');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(lastCmd(), / --effort xhigh\b/);
+
+  assert.notEqual(run('--reasoning-effort', 'ultra', '--task', 'blocked').status, 0);
+});

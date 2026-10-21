@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * AI Factory - Smart Router Engine (v2.1 - Hardened & Supervised)
- * Antigravity (orkestrasyon) -> Muse / Codex (GPT-6 & GPT-5.6 Serisi) / Gemini (Supervisor)
+ * Antigravity (orkestrasyon) -> OpenCode ücretsiz zincir -> Muse Contributor -> Codex free / Gemini (Supervisor)
  * 
  * Hardened Features (Codex Sol Review Verified):
  * - Atomic JSON State Writes (Lost-update & parse error prevention)
@@ -74,7 +74,8 @@ function getEngineHealth(engine) {
 
 function canExecuteEngine(engine, config) {
   // 0. Kota \u00d6n Denetimi (Kota t\u00fckenmi\u015fse do\u011frudan sonraki motora atla)
-  const quotaCheck = checkEngineQuotaGate(engine);
+  // Health keys may be per model ("opencode:<model>"); quota is tracked per engine.
+  const quotaCheck = checkEngineQuotaGate(engine.split(':')[0]);
   if (!quotaCheck.allowed) {
     console.warn(`[AI Factory Quota Gate] "${engine}" kotas\u0131 yetersiz: ${quotaCheck.reason}`);
     return { allowed: false, probe: false, reason: quotaCheck.reason };
@@ -459,6 +460,7 @@ function parseCliArgs() {
     model: '',
     quota: false,
     noFallback: false,
+    reasoningEffort: '',
     cwd: process.cwd()
   };
 
@@ -478,6 +480,8 @@ function parseCliArgs() {
       options.quota = true;
     } else if (arg === '--no-fallback') {
       options.noFallback = true;
+    } else if (arg === '--reasoning-effort' || arg === '--effort') {
+      options.reasoningEffort = (args[++i] || '').toLowerCase().trim();
     } else if (arg === '--cwd') {
       options.cwd = args[++i] || process.cwd();
     } else if (!options.task && !arg.startsWith('-')) {
@@ -487,92 +491,95 @@ function parseCliArgs() {
   return options;
 }
 
+const ENGINES = ['opencode', 'muse', 'codex', 'claude'];
+
+function normalizeName(value) {
+  return String(value || '').trim().toLowerCase().replace(/[\s_]+/g, '-');
+}
+
+// Finds a configured model by key, provider ID or alias; returns { engine, model } or null.
+function findModel(rawModel, config, onlyEngine = '') {
+  const wanted = normalizeName(rawModel);
+  if (!wanted) return null;
+  for (const engine of onlyEngine ? [onlyEngine] : ENGINES) {
+    const models = config?.engines?.[engine]?.models || {};
+    for (const [key, entry] of Object.entries(models)) {
+      const names = [key, entry.id, ...(entry.aliases || [])].map(normalizeName);
+      if (names.includes(wanted)) return { engine, model: key };
+    }
+  }
+  return null;
+}
+
+// Finds the longest configured model alias named in free text ("deepseek ile yap", "Opus 5.5").
+function findModelInText(text, config) {
+  const lower = text.toLowerCase();
+  let best = null;
+  for (const engine of ENGINES) {
+    for (const [key, entry] of Object.entries(config?.engines?.[engine]?.models || {})) {
+      for (const name of [key, entry.id, ...(entry.aliases || [])]) {
+        const pattern = name.toLowerCase().split(/[\s-]+/)
+          .map(part => part.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')).join('[\\s-]+');
+        if (new RegExp(`(?<![a-z0-9.])${pattern}(?![a-z0-9]|\\.\\d)`).test(lower) &&
+          (!best || name.length > best.length)) {
+          best = { engine, model: key, length: name.length, alias: name };
+        }
+      }
+    }
+  }
+  return best;
+}
+
+function hasKeyword(lower, kw) {
+  const escaped = kw.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?<![a-z0-9])${escaped}(?![a-z0-9])`).test(lower);
+}
+
 function decideEngineAndModel(task, config, forcedEngine, forcedModel) {
   if (forcedEngine) {
     const engine = forcedEngine.toLowerCase();
-    let model = forcedModel || config?.engines?.[engine]?.default_model || (engine === 'codex' ? 'gpt-6.1-sol' : engine === 'gemini' ? 'gemini' : engine === 'muse' ? 'muse-spark-1.3-contributor' : 'flash');
-    if (engine === 'muse') {
-      // G\u00dcVENL\u0130K K\u0130L\u0130D\u0130: Muse i\u00e7in \u00fccretli model ASLA kullan\u0131lamaz, her zaman 0$ muse-spark-1.3-contributor olmal\u0131d\u0131r!
-      model = 'muse-spark-1.3-contributor';
-    }
+    if (engine === 'gemini') return { engine, model: 'gemini', reason: 'Kullan\u0131c\u0131 taraf\u0131ndan zorland\u0131' };
+    // Muse is hard-locked to the free contributor model regardless of the requested model.
+    if (engine === 'muse') return { engine, model: 'muse-spark-1.3-contributor', reason: 'Kullan\u0131c\u0131 taraf\u0131ndan zorland\u0131' };
+    const found = forcedModel ? findModel(forcedModel, config, engine) : null;
+    if (forcedModel && !found && engine === 'codex') throw new Error(`Unsupported codex model: ${forcedModel}`);
+    const model = found ? found.model : (forcedModel || config.engines[engine].default_model);
     return { engine, model, reason: 'Kullan\u0131c\u0131 taraf\u0131ndan zorland\u0131' };
   }
 
-  const lower = task.toLowerCase();
+  if (forcedModel) {
+    const found = findModel(forcedModel, config);
+    if (!found) throw new Error(`Unknown model: ${forcedModel}`);
+    return { ...found, reason: `Kullan\u0131c\u0131 modeli se\u00e7ti: ${forcedModel}` };
+  }
 
-  // 0. Gemini do\u011frudan devam anahtar kelimeleri
+  // An explicitly named model always wins.
+  const named = findModelInText(task, config);
+  if (named) return { engine: named.engine, model: named.model, reason: `Model ad\u0131 belirtildi: "${named.alias}"` };
+
+  const lower = task.toLowerCase();
   for (const kw of (config?.routing_rules?.gemini_keywords || [])) {
     if (lower.includes(kw)) {
       return { engine: 'gemini', model: 'gemini', reason: `Gemini do\u011frudan devam anahtar kelimesi: "${kw}"` };
     }
   }
 
-  for (const engine of ['opencode', 'claude']) {
+  for (const engine of ENGINES) {
     for (const kw of (config?.routing_rules?.[`${engine}_keywords`] || [])) {
-      if (lower.includes(kw)) {
-        const model = engine === 'claude' && /\bopus(?:\s+|-)5[.-]5\b/.test(lower)
-          ? 'opus-5.5' : config.engines[engine].default_model;
-        return { engine, model, reason: `${engine} anahtar kelimesi: ${kw}` };
+      if (hasKeyword(lower, kw)) {
+        return { engine, model: config.engines[engine].default_model, reason: `${engine} anahtar kelimesi: ${kw}` };
       }
     }
   }
 
-  // 1. Muse anahtar kelimeleri
-  for (const kw of (config?.routing_rules?.muse_keywords || [])) {
-    if (lower.includes(kw)) {
-      return { engine: 'muse', model: 'muse-spark-1.3-contributor', reason: `Muse/Meta anahtar kelimesi: ${kw}` };
-    }
-  }
-
-  // 2. Codex anahtar kelimeleri
-  for (const kw of (config?.routing_rules?.codex_keywords || [])) {
-    if (lower.includes(kw)) {
-      let model = 'gpt-6.1-sol';
-      if (lower.includes('astra')) model = 'gpt-6-astra';
-      else if (lower.includes('terra')) model = 'gpt-5.6-terra';
-      else if (lower.includes('luna')) model = 'gpt-6-luna';
-      return { engine: 'codex', model, reason: `Codex/OpenAI anahtar kelimesi: ${kw}` };
-    }
-  }
-
-  // Complex tasks use the flagship Codex model; routine tasks start with Muse.
-  for (const kw of (config?.routing_rules?.complexity_keywords_codex || [])) {
-    if (lower.includes(kw)) return { engine: 'codex', model: 'gpt-6.1-sol', reason: `Complex task: ${kw}` };
-  }
-  return { engine: 'muse', model: 'muse-spark-1.3-contributor', reason: 'Routine task: Muse Contributor' };
+  const first = config.fallback_chain[0];
+  return { engine: first.engine, model: first.model, reason: 'Varsay\u0131lan \u00fccretsiz zincir' };
 }
 
 function resolveCodexModel(rawModel, config) {
-  if (!rawModel || typeof rawModel !== 'string') return 'gpt-6.1-sol';
-  const m = rawModel.trim().toLowerCase();
-
-  const aliases = Object.create(null);
-  aliases['luna'] = 'gpt-6-luna';
-  aliases['6-luna'] = 'gpt-6-luna';
-  aliases['gpt-6-luna'] = 'gpt-6-luna';
-  aliases['5.6-luna'] = 'gpt-5.6-luna';
-  aliases['gpt-5.6-luna'] = 'gpt-5.6-luna';
-  aliases['sol'] = 'gpt-6.1-sol';
-  aliases['6.1-sol'] = 'gpt-6.1-sol';
-  aliases['gpt-6.1-sol'] = 'gpt-6.1-sol';
-  aliases['6-sol'] = 'gpt-6-sol';
-  aliases['gpt-6-sol'] = 'gpt-6-sol';
-  aliases['5.6-sol'] = 'gpt-5.6-sol';
-  aliases['gpt-5.6-sol'] = 'gpt-5.6-sol';
-  aliases['terra'] = 'gpt-5.6-terra';
-  aliases['5.6-terra'] = 'gpt-5.6-terra';
-  aliases['gpt-5.6-terra'] = 'gpt-5.6-terra';
-  aliases['astra'] = 'gpt-6-astra';
-  aliases['6-astra'] = 'gpt-6-astra';
-  aliases['gpt-6-astra'] = 'gpt-6-astra';
-  aliases['5.5'] = 'gpt-5.5';
-  aliases['gpt-5.5'] = 'gpt-5.5';
-
-  if (aliases[m]) return aliases[m];
-  if (config?.engines?.codex?.models && Object.hasOwn(config.engines.codex.models, rawModel)) {
-    return config.engines.codex.models[rawModel].id;
-  }
-  return rawModel;
+  const found = findModel(rawModel, config, 'codex');
+  if (!found) throw new Error(`Unsupported codex model: ${rawModel}`);
+  return config.engines.codex.models[found.model].id;
 }
 
 async function executeCodex(task, model, cwd, resumeSessionId, config) {
@@ -628,10 +635,39 @@ async function executeOpenCode(task, model, cwd, resumeSessionId, config) {
   }
 }
 
-async function executeClaude(task, model, cwd, resumeSessionId, config) {
+const CLAUDE_EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'];
+
+// Picks Claude's --effort: an explicit --reasoning-effort flag wins outright; otherwise a level the
+// user names in the task text (e.g. "max effort", "xhigh") also wins, even above the auto cap; absent
+// either, complexity keywords raise it to "high", and routine tasks stay at "medium". Auto-selection
+// never goes past "high" on its own — xhigh/max require the user to ask for them.
+function decideClaudeEffort(task, config, forcedEffort) {
+  if (forcedEffort) {
+    const level = normalizeName(forcedEffort);
+    if (!CLAUDE_EFFORT_LEVELS.includes(level)) throw new Error(`Unsupported reasoning effort: ${forcedEffort}`);
+    return { level, reason: 'Kullanıcı tarafından zorlandı (--reasoning-effort)' };
+  }
+
+  const lower = (task || '').toLowerCase();
+  const effortKeywords = config?.routing_rules?.claude_effort_keywords || {};
+  for (const level of ['max', 'xhigh', 'high', 'medium', 'low']) {
+    for (const kw of (effortKeywords[level] || [])) {
+      if (hasKeyword(lower, kw)) return { level, reason: `Görevde belirtilen effort: "${kw}"` };
+    }
+  }
+
+  for (const kw of (config?.routing_rules?.complexity_keywords || [])) {
+    if (hasKeyword(lower, kw)) return { level: 'high', reason: `Karmaşık görev anahtar kelimesi: ${kw}` };
+  }
+
+  return { level: 'medium', reason: 'Standart görev' };
+}
+
+async function executeClaude(task, model, cwd, resumeSessionId, config, effort) {
   const promptFile = stateFile(`.claude_prompt_${Date.now()}_${crypto.randomUUID()}.txt`);
   fs.writeFileSync(promptFile, task, 'utf8');
   let cmd = `claude -p --output-format json --model ${model} --fallback-model ${model} --permission-mode acceptEdits --permission-prompts none`;
+  if (effort) cmd += ` --effort ${effort}`;
   if (resumeSessionId) cmd += ` --resume ${resumeSessionId}`;
   cmd += ` < "${promptFile}"`;
   try {
@@ -722,7 +758,8 @@ AI Factory Smart Router CLI (v2.1 - Hardened & Supervised)
 Kullan\u0131m:
   node router.mjs --task "G\u00f6rev metni" [--name "oturum-adi"] [--cwd "dizin"]
   node router.mjs --resume "oturum-adi" --task "Devam sorusu"
-  node router.mjs --engine codex|muse|opencode|claude [--model model-adi] --task "..."
+  node router.mjs [--engine opencode|muse|codex|claude] [--model model-adi] --task "..."
+  node router.mjs --engine claude --model <model> --reasoning-effort low|medium|high|xhigh|max --task "..."
   node router.mjs --quota   # Codex, Antigravity ve Muse canlı kotalarını listeler
     `);
     process.exit(0);
@@ -748,24 +785,24 @@ Kullan\u0131m:
 
   if (targetEngine && !['muse', 'codex', 'opencode', 'claude', 'gemini'].includes(targetEngine)) throw new Error('Unsupported engine in saved session: ' + targetEngine);
 
-  if (!targetEngine || !targetModel) {
+  {
+    // Always resolve through aliases, even when both engine and model were forced via flags/resume,
+    // so "--model haiku" or a session's saved key normalizes the same way a bare model name would.
     const decision = decideEngineAndModel(options.task, config, targetEngine, targetModel);
-    targetEngine = targetEngine || decision.engine;
-    targetModel = targetModel || decision.model;
+    targetEngine = decision.engine;
+    targetModel = decision.model;
     console.log(`[AI Factory Smart Router] Karar: ${targetEngine.toUpperCase()} (${targetModel}) -> Neden: ${decision.reason}`);
   }
 
-  if (targetEngine === 'opencode' || targetEngine === 'claude') {
-    const resolvedModel = resolveExternalModel(targetEngine, targetModel, config);
-    if (options.resume && !resumeSessionId) throw new Error(`${targetEngine} session has no ID to resume`);
-    if (resumeSessionId && !(targetEngine === 'opencode' ? /^ses_[A-Za-z0-9]+$/ : /^[0-9a-fA-F-]{36}$/).test(resumeSessionId)) {
+  if (options.resume && (targetEngine === 'opencode' || targetEngine === 'claude')) {
+    if (!resumeSessionId) throw new Error(`${targetEngine} session has no ID to resume`);
+    if (!(targetEngine === 'opencode' ? /^ses_[A-Za-z0-9]+$/ : /^[0-9a-fA-F-]{36}$/).test(resumeSessionId)) {
       throw new Error(`Invalid ${targetEngine} session ID`);
     }
-    targetModel = resolvedModel;
   }
 
   if (targetEngine === 'gemini') {
-    console.log(`\n[AI Factory Mandate] G\u00f6rev Antigravity (Gemini)'ye devredildi. Sen devam et.\n`);
+    console.log(`\n[AI Factory Mandate] Görev Antigravity (Gemini)'ye devredildi. Sen devam et.\n`);
     console.log('='.repeat(60));
     console.log('[AI FACTORY EXECUTION REPORT]');
     console.log('path: gemini [OK]');
@@ -776,182 +813,88 @@ Kullan\u0131m:
     process.exit(0);
   }
 
+  // The selected model runs first; unless it is Claude or --no-fallback is set,
+  // the free chain (OpenCode free models -> Muse Contributor -> Codex free) follows.
+  const attempts = [{ engine: targetEngine, model: targetModel, sessionId: resumeSessionId }];
+  if (!options.noFallback && targetEngine !== 'claude') {
+    for (const step of config.fallback_chain) {
+      const sameModel = step.engine === targetEngine &&
+        (step.engine === 'muse' || findModel(targetModel, config, step.engine)?.model === step.model);
+      if (!sameModel) attempts.push({ engine: step.engine, model: step.model, sessionId: null });
+    }
+  }
+  // Resolve every model before launching anything so a disallowed model never runs.
+  for (const attempt of attempts) {
+    if (attempt.engine === 'opencode' || attempt.engine === 'claude') {
+      attempt.model = resolveExternalModel(attempt.engine, attempt.model, config);
+    } else if (attempt.engine === 'codex') {
+      resolveCodexModel(attempt.model, config);
+      attempt.model = findModel(attempt.model, config, 'codex').model;
+    } else {
+      attempt.model = resolveMuseModel(attempt.model, config).model;
+    }
+  }
+
   const pathSteps = ['gemini'];
   const choices = [];
   const errors = [];
   let succeedWith = null;
   let lastOutput = '';
   let lastSessionId = null;
+  const claudeEffort = decideClaudeEffort(options.task, config, options.reasoningEffort);
+  if (attempts.some(a => a.engine === 'claude')) {
+    console.log(`[AI Factory Claude Effort] Karar: ${claudeEffort.level} -> Neden: ${claudeEffort.reason}`);
+  }
+  const executors = {
+    opencode: executeOpenCode,
+    claude: (task, model, cwd, resumeSessionId, cfg) => executeClaude(task, model, cwd, resumeSessionId, cfg, claudeEffort.level),
+    muse: executeMuse,
+    codex: executeCodex
+  };
 
-  // Muse and Codex are the default and fallback engines.
-  if (targetEngine === 'opencode' || targetEngine === 'claude') {
-    choices.push(targetEngine);
-    const gate = canExecuteEngine(targetEngine, config);
+  for (const [index, attempt] of attempts.entries()) {
+    const { engine, model } = attempt;
+    if (index > 0) {
+      console.warn(`\n[AI Factory Fallback] Önceki model başarısız (${errors.at(-1)}). ${engine}(${model}) deneniyor...`);
+    }
+    if (!choices.includes(engine)) choices.push(engine);
+    // OpenCode models are tracked separately so one rate-limited model does not block the others.
+    const healthKey = engine === 'opencode' ? `opencode:${model}` : engine;
+    const gate = canExecuteEngine(healthKey, config);
     if (!gate.allowed) {
-      pathSteps.push(`${targetEngine}(${targetModel}) [QUARANTINED]`);
-      errors.push(`${targetEngine} (quarantined: ${gate.reason})`);
-    } else {
-      try {
-        const execute = targetEngine === 'opencode' ? executeOpenCode : executeClaude;
-        const res = await execute(options.task, targetModel, options.cwd, resumeSessionId, config);
-        lastOutput = res.output;
-        lastSessionId = res.sessionId;
-        if (res.exitCode === 0 && !res.watchdogTimeout && !res.cliError && res.hasResponse) {
-          succeedWith = `${targetEngine}-${targetModel}`;
-          recordEngineSuccess(targetEngine, config);
-          pathSteps.push(`${targetEngine}(${targetModel}) [OK]`);
-        } else {
-          const classified = classifyError(res.exitCode, res.output, res);
-          recordEngineFailure(targetEngine, classified, config);
-          errors.push(`${targetEngine}-${targetModel} (${classified.reason})`);
-          pathSteps.push(`${targetEngine}(${targetModel}) [FAIL: ${classified.reason}]`);
-          if (!classified.fallbackEligible) options.engine = 'aborted';
-        }
-      } catch (err) {
-        const classified = classifyError(1, err.message);
-        recordEngineFailure(targetEngine, classified, config);
-        errors.push(`${targetEngine} (${err.message})`);
-        pathSteps.push(`${targetEngine}(${targetModel}) [FAIL: ${err.message}]`);
-      }
+      console.warn(`[AI Factory Pre-Flight Gate] ⛔ ${engine}(${model}) kullanılamıyor (${gate.reason}).`);
+      pathSteps.push(`${engine}(${model}) [QUARANTINED]`);
+      errors.push(`${engine}-${model} (quarantined: ${gate.reason})`);
+      continue;
     }
-  } else if (targetEngine === 'muse') {
-    if (!choices.includes('muse')) choices.push('muse');
-    // Muse -> Codex -> Gemini
-    const museGate = canExecuteEngine('muse', config);
-    if (!museGate.allowed) {
-      console.warn(`[AI Factory Pre-Flight Gate] \u26d4 Muse motoru karantinada (${museGate.reason}).`);
-      pathSteps.push(`muse(${targetModel}) [QUARANTINED]`);
-      errors.push(`muse (quarantined: ${museGate.reason})`);
-    } else {
-      try {
-        const res = await executeMuse(options.task, targetModel, options.cwd, resumeSessionId, config);
-        lastOutput = res.output;
-        if (res.sessionId) lastSessionId = res.sessionId;
-        if (res.exitCode === 0 && !res.watchdogTimeout && res.output.trim().length > 0) {
-          succeedWith = targetModel.startsWith('muse') ? targetModel : `muse-${targetModel}`;
-          recordEngineSuccess('muse', config);
-          pathSteps.push(`muse(${targetModel}) [OK]`);
-        } else {
-          const classified = classifyError(res.exitCode, res.output, res);
-          recordEngineFailure('muse', classified, config);
-          errors.push(`muse-${targetModel} (${classified.reason})`);
-          pathSteps.push(`muse(${targetModel}) [FAIL: ${classified.reason}]`);
-
-          if (!classified.fallbackEligible) {
-            console.warn(`\n[AI Factory Abort Guard] \u0130stek sonland\u0131r\u0131ld\u0131 (${classified.reason}). Fallback durduruldu.\n`);
-            options.engine = 'aborted';
-          }
-        }
-      } catch (err) {
-        const classified = classifyError(1, err.message);
-        recordEngineFailure('muse', classified, config);
-        errors.push(`muse (${err.message})`);
-        pathSteps.push(`muse(${targetModel}) [FAIL: ${err.message}]`);
+    let classified;
+    try {
+      const res = await executors[engine](options.task, model, options.cwd, attempt.sessionId, config);
+      lastOutput = res.output;
+      if (res.sessionId) lastSessionId = res.sessionId;
+      const jsonEngine = engine === 'opencode' || engine === 'claude';
+      const ok = res.exitCode === 0 && !res.watchdogTimeout &&
+        (jsonEngine ? !res.cliError && res.hasResponse : res.output.trim().length > 0);
+      if (ok) {
+        succeedWith = engine === 'muse' ? model : `${engine}-${model}`;
+        recordEngineSuccess(healthKey, config);
+        pathSteps.push(`${engine}(${model}) [OK]`);
+        targetEngine = engine;
+        targetModel = model;
+        break;
       }
+      classified = classifyError(res.exitCode, res.output, res);
+    } catch (err) {
+      classified = { ...classifyError(1, err.message), reason: err.message };
     }
-
-    // Muse ba\u015far\u0131s\u0131zsa -> Codex'e devret
-    if (!succeedWith && options.engine !== 'aborted' && !options.noFallback) {
-      if (!choices.includes('codex')) choices.push('codex');
-      console.warn(`\n[AI Factory Fallback] Muse ba\u015far\u0131s\u0131z oldu (${errors.join(', ')}). Codex motoruna devrediliyor...`);
-      const codexGate = canExecuteEngine('codex', config);
-      if (!codexGate.allowed) {
-        pathSteps.push('codex(gpt-6-luna) [QUARANTINED]');
-        errors.push(`codex (quarantined: ${codexGate.reason})`);
-      } else {
-        try {
-          const res = await executeCodex(options.task, 'gpt-6-luna', options.cwd, null, config);
-          lastOutput = res.output;
-          if (res.exitCode === 0 && !res.watchdogTimeout && res.output.trim().length > 0) {
-            succeedWith = 'codex-gpt-6-luna';
-            recordEngineSuccess('codex', config);
-            targetEngine = 'codex';
-            targetModel = 'gpt-6-luna';
-            pathSteps.push('codex(gpt-6-luna) [OK]');
-          } else {
-            const classified = classifyError(res.exitCode, res.output, res);
-            recordEngineFailure('codex', classified, config);
-            errors.push(`codex-gpt-6-luna (${classified.reason})`);
-            pathSteps.push(`codex(gpt-6-luna) [FAIL: ${classified.reason}]`);
-          }
-        } catch (err) {
-          const classified = classifyError(1, err.message);
-          recordEngineFailure('codex', classified, config);
-          errors.push(`codex (${err.message})`);
-          pathSteps.push(`codex(gpt-6-luna) [FAIL: ${err.message}]`);
-        }
-      }
+    recordEngineFailure(healthKey, classified, config);
+    errors.push(`${engine}-${model} (${classified.reason})`);
+    pathSteps.push(`${engine}(${model}) [FAIL: ${classified.reason}]`);
+    if (!classified.fallbackEligible) {
+      console.warn(`\n[AI Factory Abort Guard] İstek sonlandırıldı (${classified.reason}). Fallback durduruldu.\n`);
+      options.engine = 'aborted';
+      break;
     }
-
-  } else if (targetEngine === 'codex') {
-    if (!choices.includes('codex')) choices.push('codex');
-    // Codex -> Muse -> Gemini
-    const codexGate = canExecuteEngine('codex', config);
-    if (!codexGate.allowed) {
-      console.warn(`[AI Factory Pre-Flight Gate] \u26d4 Codex motoru karantinada (${codexGate.reason}).`);
-      pathSteps.push(`codex(${targetModel}) [QUARANTINED]`);
-      errors.push(`codex (quarantined: ${codexGate.reason})`);
-    } else {
-      try {
-        const res = await executeCodex(options.task, targetModel, options.cwd, resumeSessionId, config);
-        lastOutput = res.output;
-        if (res.exitCode === 0 && !res.watchdogTimeout && res.output.trim().length > 0) {
-          succeedWith = `codex-${targetModel}`;
-          recordEngineSuccess('codex', config);
-          pathSteps.push(`codex(${targetModel}) [OK]`);
-        } else {
-          const classified = classifyError(res.exitCode, res.output, res);
-          recordEngineFailure('codex', classified, config);
-          errors.push(`codex-${targetModel} (${classified.reason})`);
-          pathSteps.push(`codex(${targetModel}) [FAIL: ${classified.reason}]`);
-
-          if (!classified.fallbackEligible) {
-            console.warn(`\n[AI Factory Abort Guard] \u0130stek sonland\u0131r\u0131ld\u0131 (${classified.reason}). Fallback durduruldu.\n`);
-            options.engine = 'aborted';
-          }
-        }
-      } catch (err) {
-        const classified = classifyError(1, err.message);
-        recordEngineFailure('codex', classified, config);
-        errors.push(`codex (${err.message})`);
-        pathSteps.push(`codex(${targetModel}) [FAIL: ${err.message}]`);
-      }
-    }
-
-    // Codex ba\u015far\u0131s\u0131z olursa -> Muse'a devret
-    if (!succeedWith && options.engine !== 'aborted' && !options.noFallback) {
-      if (!choices.includes('muse')) choices.push('muse');
-      console.warn(`\n[AI Factory Fallback] Codex ba\u015far\u0131s\u0131z oldu (${errors.join(', ')}). Muse (0$ Contributor) motoruna devrediliyor...`);
-      const museGate = canExecuteEngine('muse', config);
-      if (!museGate.allowed) {
-        pathSteps.push('muse(muse-spark-1.3-contributor) [QUARANTINED]');
-        errors.push(`muse (quarantined: ${museGate.reason})`);
-      } else {
-        try {
-          const res = await executeMuse(options.task, 'muse-spark-1.3-contributor', options.cwd, null, config);
-          lastOutput = res.output;
-          if (res.sessionId) lastSessionId = res.sessionId;
-          if (res.exitCode === 0 && !res.watchdogTimeout && res.output.trim().length > 0) {
-            succeedWith = 'muse-spark-1.3-contributor';
-            recordEngineSuccess('muse', config);
-            targetEngine = 'muse';
-            targetModel = 'muse-spark-1.3-contributor';
-            pathSteps.push('muse(muse-spark-1.3-contributor) [OK]');
-          } else {
-            const classified = classifyError(res.exitCode, res.output, res);
-            recordEngineFailure('muse', classified, config);
-            errors.push(`muse-spark-1.3-contributor (${classified.reason})`);
-            pathSteps.push(`muse(muse-spark-1.3-contributor) [FAIL: ${classified.reason}]`);
-          }
-        } catch (err) {
-          const classified = classifyError(1, err.message);
-          recordEngineFailure('muse', classified, config);
-          errors.push(`muse (${err.message})`);
-          pathSteps.push(`muse(muse-spark-1.3-contributor) [FAIL: ${err.message}]`);
-        }
-      }
-    }
-
   }
 
   // --no-fallback also prevents reporting a successful Gemini handoff on failure.

@@ -8,12 +8,12 @@ The plugin's `PreInvocation` / `PreToolUse` hooks live in `plugins/ai-factory/ho
 
 | Starting engine | Selection | Failure path (unless `--no-fallback`) |
 |---|---|---|
-| Muse | Default for routine tasks; explicit or configured Muse keywords | Codex → Gemini handoff |
-| Codex | Configured complexity keywords or explicit Codex requests | Muse → Gemini handoff |
-| OpenCode | Explicit or OpenCode keywords; only free allowlisted models | Gemini handoff |
+| OpenCode | Default (chain steps 1–3: DeepSeek v4.1, MiMo v2.6, GLM 5.3), named OpenCode model, or OpenCode keywords; only free allowlisted models | Remaining chain steps → Gemini handoff |
+| Muse | Chain step 4, Muse model name or keywords; fixed contributor model | Remaining chain steps → Gemini handoff |
+| Codex | Chain step 5 (`gpt-6-luna`), named Codex model or keywords; free tier only (luna, terra) | Remaining chain steps → Gemini handoff |
 | Claude | Explicit or Claude keywords; Haiku by default, Opus 5.5 when explicitly requested | Gemini handoff |
 
-An explicit `--engine` wins over keyword selection. OpenCode and Claude model aliases resolve through `router_config.json`, then pass an allowlist and cost check before execution. The router invokes their local CLIs with JSON output, captures response text and session ID, and records a named session only when the provider returns an ID. On resume, the saved engine and working directory are reused; OpenCode and Claude permit switching to another allowed model. CLI authentication and actual provider access are external prerequisites.
+An explicit `--engine` or `--model` wins; then a model name found in the task text; then Gemini and engine keywords; otherwise `fallback_chain` from `router_config.json`. OpenCode health is tracked per model, so one rate-limited model does not quarantine the rest. OpenCode and Claude model aliases resolve through `router_config.json`, then pass an allowlist and cost check before execution. The router invokes their local CLIs with JSON output, captures response text and session ID, and records a named session only when the provider returns an ID. On resume, the saved engine and working directory are reused; OpenCode and Claude permit switching to another allowed model. CLI authentication and actual provider access are external prerequisites.
 
 The per-engine health gate checks cached quota and circuit-breaker state before launching an engine. A failed response is classified; only eligible failures follow the engine-specific fallback order. Muse and Codex use their own CLIs. Gemini is a handoff to the parent Antigravity agent, not another API call by the router.
 

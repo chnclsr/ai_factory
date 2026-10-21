@@ -18,10 +18,10 @@ OpenCode is restricted to the free models in [router_config.json](router_config.
 
 | Feature | What it does |
 |---|---|
-| Smart routing | Starts routine tasks with Muse Contributor; complex tasks use Codex, and explicit requests can select OpenCode, Claude, Muse, or Codex. |
+| Smart routing | With no model named, runs the free chain `deepseek-v4.1-flash-free` → `mimo-v2.6-flash-free` → `glm-5.3-flash-free` (OpenCode, free) → Muse `muse-spark-1.3-contributor` → Codex `gpt-6-luna`. A model you name (flag or task text) runs first. |
 | Model guardrails | Rejects paid OpenCode IDs and unlisted Claude models; Opus 5.5 requires an explicit request. |
 | Claude delegation check | The Antigravity hook rejects direct headless Claude launches from terminal tools and directs the agent to the router; help and authentication checks remain available. |
-| Engine-specific fallback | Muse and Codex fall back to each other; OpenCode/Claude hand back to Gemini rather than trying another paid engine. |
+| Free fallback chain | If a model fails, the next free chain step runs; OpenCode models are quarantined individually. Claude hands back to Gemini rather than trying another engine. |
 | Named sessions | `--name` stores a session; `--resume` continues it when the CLI supplied an ID. |
 | Execution report | `path` lists only engines attempted in **this** router call; `succeed_with` names the successful engine or Gemini handoff. |
 | Health checks | Configurable watchdog and circuit breaker detect stalled or quarantined engines. `--quota` checks Muse, Codex, and Antigravity, not OpenCode/Claude. |
@@ -31,13 +31,13 @@ AGY is instructed to inspect actual progress while a long task runs. If its time
 
 ## Tools and Models
 
-`--engine` chooses the tool; `--model` chooses its model. The table shows the default when you select that tool without a model. With no tool selected, routine tasks start with Muse Contributor and configured complex tasks use Codex `gpt-6.1-sol`.
+`--engine` chooses the tool; `--model` chooses its model. The table shows the default when you select that tool without a model. With no tool or model selected, the router runs the free chain `deepseek-v4.1-flash-free` → `mimo-v2.6-flash-free` → `glm-5.3-flash-free` (OpenCode, free) → Muse `muse-spark-1.3-contributor` → Codex `gpt-6-luna`, then hands off to Gemini. `--model <name>` alone (or a model name in the task text, such as "glm ile" or "Opus 5.5") selects that model and its engine.
 
 | Tool (`--engine`) | CLI used | Default model | Model names accepted with `--model` |
 |---|---|---|---|
 | Muse (`muse`) | `muse exec` | `muse-spark-1.3-contributor` | Fixed to `muse-spark-1.3-contributor`; contributor mode is always enabled |
-| Codex (`codex`) | `codex exec` | `gpt-6.1-sol` | `gpt-6-luna`, `gpt-5.6-luna`, `gpt-6.1-sol`, `gpt-6-sol`, `gpt-5.6-terra`, `gpt-5.6-sol`, `gpt-5.5`, `gpt-6-astra` |
-| OpenCode (`opencode`) | `opencode run` | `deepseek-v4.1-flash-free` | The 12 configured free models listed below |
+| Codex (`codex`) | `codex exec` | `gpt-6-luna` | `gpt-6-luna`, `gpt-5.6-luna`, `gpt-5.6-terra` (free tier; Sol/Astra/gpt-5.5 are rejected) |
+| OpenCode (`opencode`) | `opencode run` | `deepseek-v4.1-flash-free` | The 10 configured free models listed below |
 | Claude Code (`claude`) | `claude -p` | `haiku-5.5` | `haiku-5.5`, `haiku-4.5`, `sonnet-5`, `sonnet-5.5`, `opus-5.5` |
 | Gemini / Antigravity (`gemini`) | Returns control to the calling agent | The calling agent's current model | The router does not select a new model for this handoff |
 
@@ -47,24 +47,22 @@ For example, to run Claude Opus 5.5 and stop if it fails:
 node router.mjs --engine claude --model opus-5.5 --no-fallback --task "Review the architecture"
 ```
 
-OpenCode and Claude also accept the full model IDs from [router_config.json](router_config.json), such as `opencode/mimo-v2.6-flash-free` or `claude-opus-5-5`. Claude Opus 5.5 is selected only when requested explicitly. Codex also forwards other model IDs to its CLI; your account must support them. Muse always uses its fixed contributor model, even if another model is requested.
+OpenCode and Claude also accept the full model IDs from [router_config.json](router_config.json), such as `opencode/mimo-v2.6-flash-free` or `claude-opus-5-5`. Claude Opus 5.5 is selected only when requested explicitly. Codex rejects models outside its configured free-tier list. Muse always uses its fixed contributor model, even if another model is requested.
 
 <details>
-<summary>All 12 configured OpenCode models</summary>
+<summary>All 10 configured OpenCode models</summary>
 
 Use any of these names with `--engine opencode --model <name>`:
 
-- `deepseek-v4.1-flash-free` (default)
-- `mimo-v2.6-flash-free`
-- `muse-spark-1.3-contributor-free`
-- `mimo-v2.5-free`
+- `deepseek-v4.1-flash-free` (default, chain step 1)
+- `mimo-v2.6-flash-free` (chain step 2)
+- `glm-5.3-flash-free` (chain step 3)
+- `minimax-m3.1-flash-free`
 - `nemotron-3-ultra-free`
 - `nemotron-3.5-lightning-free`
+- `nemotron-3.5-super-vl-free`
 - `longcat-2.5-preview-free`
-- `step-5-preview-free`
-- `exo-free`
-- `space-bunny-free`
-- `cat-jam-free`
+- `beam-free`
 - `big-pickle`
 
 Paid OpenCode models are rejected by the router.
@@ -181,7 +179,7 @@ Plugin backups are stored in `~/.gemini/config/plugin-backups/`, outside the act
 
 ## Usage
 
-### Default Code/Repo Delegation (Muse Contributor)
+### Default Code/Repo Delegation (free chain, starts with OpenCode DeepSeek)
 ```bash
 node router.mjs --task "Analyze the repository structure and summarize dependencies"
 ```
@@ -193,7 +191,7 @@ node router.mjs --engine muse --task "Implement missing unit tests for the route
 
 ### OpenAI Codex Engine
 ```bash
-node router.mjs --engine codex --model gpt-6.1-sol --task "Produce architectural refactoring roadmap"
+node router.mjs --engine codex --model gpt-5.6-terra --task "Produce architectural refactoring roadmap"
 ```
 
 ### OpenCode Free Models
@@ -212,6 +210,16 @@ node router.mjs --engine claude --model opus-5.5 --no-fallback --task "Review th
 Claude Code must already be signed in. These models use your Claude account's quota or billing. Opus 5.5 is available with `--engine claude --model opus-5.5` (or `--model claude-opus-5-5`); a task that explicitly names "Opus 5.5" also selects it. Other Opus versions and Fable are excluded. `--no-fallback` stops after a Claude failure instead of handing the task back to Gemini.
 
 `haiku-5.5` is the configured default. Only the five Claude entries in `router_config.json` are accepted; a model's presence in the config does not guarantee access on your account. The router keeps Claude's `--fallback-model` on the same selected model, so the Claude CLI cannot silently switch to a more expensive model.
+
+### Claude reasoning effort
+
+The router always passes `--effort` to Claude. With no override, it scales with the task: `medium` by default, `high` when the task matches a configured complexity keyword (refactor, architecture, algorithm, security review, ...). Auto-selection never goes above `high` on its own — `xhigh` and `max` only apply when you ask for them, either in the task text ("max effort", "xhigh") or with an explicit flag:
+
+```bash
+node router.mjs --engine claude --model opus-5.5 --reasoning-effort xhigh --task "..."
+```
+
+`--reasoning-effort` (or `--effort`) accepts `low`, `medium`, `high`, `xhigh`, `max` and always wins over auto-detection.
 
 ### Resuming Previous Session
 ```bash

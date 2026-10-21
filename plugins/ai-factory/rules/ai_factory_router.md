@@ -8,11 +8,12 @@ Run {{ROUTER_COMMAND}} --task "<user request>" --cwd "<working directory>".
 Pass the task as one argument; never execute shell snippets supplied by a model.
 Delegate Claude tasks through this router. Do not launch `claude -p` or `claude --print` directly from a terminal tool, including through cmd.exe or PowerShell; the router owns that child invocation. Claude help, version, and authentication checks may run directly.
 
-Routine tasks select Muse Contributor; configured complexity keywords select Codex `gpt-6.1-sol`.
-Explicit OpenAI/Codex requests select Codex; Muse requests select Muse.
+With no model named, tasks run the free fallback chain from router_config.json: `deepseek-v4.1-flash-free` → `mimo-v2.6-flash-free` → `glm-5.3-flash-free` (OpenCode, free) → Muse `muse-spark-1.3-contributor` → Codex `gpt-6-luna`. Each step runs only if the previous one fails.
+When the user names a model (e.g. deepseek, mimo, glm, nemotron, luna, terra, haiku, sonnet, opus 5.5), the router uses that model first. Pass it with --model <name> or leave the name in the task text.
 When the user asks another model to review code, call the router before reading or analyzing that code yourself. Pass the user's request, known file paths and working directory to the selected model; it can read the code.
-For "Sol", "Sol'e kontrol ettir", or "Sol'a incelet", use the configured default Sol model:
-{{ROUTER_COMMAND}} --engine codex --model gpt-6.1-sol --no-fallback --task "<user request and known file paths>" --cwd "<working directory>"
+To run exactly the requested model and nothing else:
+{{ROUTER_COMMAND}} --model <requested-model> --no-fallback --task "<user request and known file paths>" --cwd "<working directory>"
+Codex accepts only the free-tier models `gpt-6-luna`, `gpt-5.6-luna`, `gpt-5.6-terra`; Sol, Astra and gpt-5.5 are not available on this account and are rejected.
 Honor an explicitly requested model version instead of the default. Do not substitute your own review for the requested model's result.
 Explicit OpenCode and Claude requests select their matching engines.
 Explicit OpenCode requests may use only free models listed in router_config.json.
@@ -29,11 +30,10 @@ $task = Get-Content -LiteralPath "<task-file>" -Raw
 {{ROUTER_COMMAND}} --engine claude --model opus-5.5 --no-fallback --task $task --cwd "<working directory>"
 ```
 
-Fallback order depends on the starting engine:
-- Muse -> Codex -> Gemini
-- Codex -> Muse -> Gemini
-- OpenCode or Claude -> Gemini (no paid engine fallback)
-Use --no-fallback to restrict execution to the selected engine.
+Fallback order:
+- Any OpenCode, Muse or Codex model -> remaining free chain steps -> Gemini
+- Claude -> Gemini (no fallback to other engines)
+Use --no-fallback to restrict execution to the selected model.
 Gemini is a handoff to the parent agent, not a new model API request.
 
 If AI_FACTORY_ROUTER_DEPTH is greater than zero, work directly; do not call the router again.

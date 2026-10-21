@@ -1,112 +1,237 @@
 {
-  "version": "1.1.0",
+  "version": "1.2.0",
   "policy": "token_saver_offload",
-  "description": "Antigravity minimal token harcar, agir isleri Muse ve Codex'e delege eder.",
-  "engines": {
-    "codex": {
-      "type": "codex_cli",
-      "models": {
-        "gpt-6-luna": {
-          "id": "gpt-6-luna",
-          "cost_input_per_m": 0.10,
-          "cost_output_per_m": 0.50,
-          "role": "ultra_fast_lightweight",
-          "description": "En ucuz yeni nesil GPT-6 serisi model"
-        },
-        "gpt-5.6-luna": {
-          "id": "gpt-5.6-luna",
-          "cost_input_per_m": 0.20,
-          "cost_output_per_m": 1.20,
-          "role": "fast_lightweight",
-          "description": "Hafif ve ekonomik GPT-5.6 modeli"
-        },
-        "gpt-6.1-sol": {
-          "id": "gpt-6.1-sol",
-          "cost_input_per_m": 2.00,
-          "cost_output_per_m": 10.00,
-          "role": "flagship_primary",
-          "description": "Varsayilan amiral gemisi genel kodlama ve mantik modeli"
-        },
-        "gpt-6-sol": {
-          "id": "gpt-6-sol",
-          "cost_input_per_m": 2.00,
-          "cost_output_per_m": 10.00,
-          "role": "flagship_base",
-          "description": "Standart GPT-6 serisi amiral gemisi"
-        },
-        "gpt-5.6-terra": {
-          "id": "gpt-5.6-terra",
-          "cost_input_per_m": 2.00,
-          "cost_output_per_m": 12.00,
-          "role": "balanced_workhorse",
-          "description": "Orta segment guclu GPT-5.6 modeli"
-        },
-        "gpt-5.6-sol": {
-          "id": "gpt-5.6-sol",
-          "cost_input_per_m": 4.00,
-          "cost_output_per_m": 20.00,
-          "role": "high_capability",
-          "description": "Yuksek kapasiteli GPT-5.6 modeli"
-        },
-        "gpt-5.5": {
-          "id": "gpt-5.5",
-          "cost_input_per_m": 5.00,
-          "cost_output_per_m": 30.00,
-          "role": "legacy_heavy",
-          "description": "Onceki nesil agir muhakeme modeli"
-        },
-        "gpt-6-astra": {
-          "id": "gpt-6-astra",
-          "cost_input_per_m": 10.00,
-          "cost_output_per_m": 50.00,
-          "role": "frontier_reasoning",
-          "description": "En ust duzey (frontier) akil yurutme ve uzman model"
-        }
-      }
+  "description": "Antigravity minimal token harcar; isler once OpenCode ucretsiz modellerine, sonra Muse Contributor ve Codex ucretsiz modellerine delege edilir.",
+  "fallback_chain": [
+    {
+      "engine": "opencode",
+      "model": "deepseek-v4.1-flash-free"
     },
+    {
+      "engine": "opencode",
+      "model": "mimo-v2.6-flash-free"
+    },
+    {
+      "engine": "opencode",
+      "model": "glm-5.3-flash-free"
+    },
+    {
+      "engine": "muse",
+      "model": "muse-spark-1.3-contributor"
+    },
+    {
+      "engine": "codex",
+      "model": "gpt-6-luna"
+    }
+  ],
+  "engines": {
     "opencode": {
       "type": "opencode_cli",
       "default_model": "deepseek-v4.1-flash-free",
       "models": {
-        "deepseek-v4.1-flash-free": { "id": "opencode/deepseek-v4.1-flash-free", "cost_input_per_m": 0, "cost_output_per_m": 0 },
-        "mimo-v2.6-flash-free": { "id": "opencode/mimo-v2.6-flash-free", "cost_input_per_m": 0, "cost_output_per_m": 0 },
-        "muse-spark-1.3-contributor-free": { "id": "opencode/muse-spark-1.3-contributor-free", "cost_input_per_m": 0, "cost_output_per_m": 0 },
-        "mimo-v2.5-free": { "id": "opencode/mimo-v2.5-free", "cost_input_per_m": 0, "cost_output_per_m": 0 },
-        "nemotron-3-ultra-free": { "id": "opencode/nemotron-3-ultra-free", "cost_input_per_m": 0, "cost_output_per_m": 0 },
-        "nemotron-3.5-lightning-free": { "id": "opencode/nemotron-3.5-lightning-free", "cost_input_per_m": 0, "cost_output_per_m": 0 },
-        "longcat-2.5-preview-free": { "id": "opencode/longcat-2.5-preview-free", "cost_input_per_m": 0, "cost_output_per_m": 0 },
-        "step-5-preview-free": { "id": "opencode/step-5-preview-free", "cost_input_per_m": 0, "cost_output_per_m": 0 },
-        "exo-free": { "id": "opencode/exo-free", "cost_input_per_m": 0, "cost_output_per_m": 0 },
-        "space-bunny-free": { "id": "opencode/space-bunny-free", "cost_input_per_m": 0, "cost_output_per_m": 0 },
-        "cat-jam-free": { "id": "opencode/cat-jam-free", "cost_input_per_m": 0, "cost_output_per_m": 0 },
-        "big-pickle": { "id": "opencode/big-pickle", "cost_input_per_m": 0, "cost_output_per_m": 0 }
-      }
-    },
-    "claude": {
-      "type": "claude_cli",
-      "default_model": "haiku-5.5",
-      "models": {
-        "haiku-5.5": { "id": "claude-haiku-5-5", "cost_input_per_m": 0.10, "cost_output_per_m": 0.50 },
-        "haiku-4.5": { "id": "claude-haiku-4-5-20251001", "cost_input_per_m": 1, "cost_output_per_m": 5 },
-        "sonnet-5": { "id": "claude-sonnet-5", "cost_input_per_m": 2, "cost_output_per_m": 10 },
-        "sonnet-5.5": { "id": "claude-sonnet-5-5", "cost_input_per_m": 2, "cost_output_per_m": 10 },
-        "opus-5.5": { "id": "claude-opus-5-5", "cost_input_per_m": 4, "cost_output_per_m": 20 }
+        "deepseek-v4.1-flash-free": {
+          "id": "opencode/deepseek-v4.1-flash-free",
+          "cost_input_per_m": 0,
+          "cost_output_per_m": 0,
+          "aliases": [
+            "deepseek",
+            "deepseek v4.1",
+            "deepseek-v4.1"
+          ]
+        },
+        "mimo-v2.6-flash-free": {
+          "id": "opencode/mimo-v2.6-flash-free",
+          "cost_input_per_m": 0,
+          "cost_output_per_m": 0,
+          "aliases": [
+            "mimo",
+            "mimo v2.6",
+            "mimo-v2.6"
+          ]
+        },
+        "glm-5.3-flash-free": {
+          "id": "opencode/glm-5.3-flash-free",
+          "cost_input_per_m": 0,
+          "cost_output_per_m": 0,
+          "aliases": [
+            "glm",
+            "glm 5.3",
+            "glm-5.3"
+          ]
+        },
+        "minimax-m3.1-flash-free": {
+          "id": "opencode/minimax-m3.1-flash-free",
+          "cost_input_per_m": 0,
+          "cost_output_per_m": 0,
+          "aliases": [
+            "minimax",
+            "minimax m3.1"
+          ]
+        },
+        "nemotron-3-ultra-free": {
+          "id": "opencode/nemotron-3-ultra-free",
+          "cost_input_per_m": 0,
+          "cost_output_per_m": 0,
+          "aliases": [
+            "nemotron",
+            "nemotron ultra",
+            "nemotron 3 ultra"
+          ]
+        },
+        "nemotron-3.5-lightning-free": {
+          "id": "opencode/nemotron-3.5-lightning-free",
+          "cost_input_per_m": 0,
+          "cost_output_per_m": 0,
+          "aliases": [
+            "nemotron lightning",
+            "nemotron 3.5 lightning"
+          ]
+        },
+        "nemotron-3.5-super-vl-free": {
+          "id": "opencode/nemotron-3.5-super-vl-free",
+          "cost_input_per_m": 0,
+          "cost_output_per_m": 0,
+          "aliases": [
+            "nemotron super",
+            "nemotron 3.5 super"
+          ]
+        },
+        "longcat-2.5-preview-free": {
+          "id": "opencode/longcat-2.5-preview-free",
+          "cost_input_per_m": 0,
+          "cost_output_per_m": 0,
+          "aliases": [
+            "longcat"
+          ]
+        },
+        "beam-free": {
+          "id": "opencode/beam-free",
+          "cost_input_per_m": 0,
+          "cost_output_per_m": 0,
+          "aliases": []
+        },
+        "big-pickle": {
+          "id": "opencode/big-pickle",
+          "cost_input_per_m": 0,
+          "cost_output_per_m": 0,
+          "aliases": [
+            "big pickle",
+            "big-pickle"
+          ]
+        }
       }
     },
     "muse": {
       "type": "muse_cli",
       "default_model": "muse-spark-1.3-contributor",
-      "cost_usd": 0.0,
+      "cost_usd": 0,
       "models": {
         "muse-spark-1.3-contributor": {
           "id": "muse-spark-1.3-contributor",
           "base_model": "muse-spark-1.3-contributor",
           "contributor_mode": true,
           "reasoning_effort": "high",
-          "cost_input_per_m": 0.0,
-          "cost_output_per_m": 0.0,
+          "cost_input_per_m": 0,
+          "cost_output_per_m": 0,
           "role": "free_meta_coding_agent",
-          "description": "Meta Muse Spark 1.3 Contributor (0$ ucretsiz kodlama ajani)"
+          "description": "Meta Muse Spark 1.3 Contributor (0$ ucretsiz kodlama ajani)",
+          "aliases": [
+            "muse",
+            "muse spark",
+            "muse contributor"
+          ]
+        }
+      }
+    },
+    "codex": {
+      "type": "codex_cli",
+      "default_model": "gpt-6-luna",
+      "models": {
+        "gpt-6-luna": {
+          "id": "gpt-6-luna",
+          "cost_input_per_m": 0.1,
+          "cost_output_per_m": 0.5,
+          "role": "ultra_fast_lightweight",
+          "description": "En ucuz yeni nesil GPT-6 serisi model",
+          "aliases": [
+            "luna",
+            "gpt-6 luna",
+            "6-luna"
+          ]
+        },
+        "gpt-5.6-luna": {
+          "id": "gpt-5.6-luna",
+          "cost_input_per_m": 0.2,
+          "cost_output_per_m": 1.2,
+          "role": "fast_lightweight",
+          "description": "Hafif ve ekonomik GPT-5.6 modeli",
+          "aliases": [
+            "gpt-5.6 luna",
+            "5.6-luna",
+            "5.6 luna"
+          ]
+        },
+        "gpt-5.6-terra": {
+          "id": "gpt-5.6-terra",
+          "cost_input_per_m": 2,
+          "cost_output_per_m": 12,
+          "role": "balanced_workhorse",
+          "description": "Orta segment guclu GPT-5.6 modeli",
+          "aliases": [
+            "terra",
+            "5.6-terra",
+            "5.6 terra"
+          ]
+        }
+      }
+    },
+    "claude": {
+      "type": "claude_cli",
+      "default_model": "haiku-5.5",
+      "models": {
+        "haiku-5.5": {
+          "id": "claude-haiku-5-5",
+          "cost_input_per_m": 0.1,
+          "cost_output_per_m": 0.5,
+          "aliases": [
+            "haiku",
+            "haiku 5.5"
+          ]
+        },
+        "haiku-4.5": {
+          "id": "claude-haiku-4-5-20251001",
+          "cost_input_per_m": 1,
+          "cost_output_per_m": 5,
+          "aliases": [
+            "haiku 4.5"
+          ]
+        },
+        "sonnet-5": {
+          "id": "claude-sonnet-5",
+          "cost_input_per_m": 2,
+          "cost_output_per_m": 10,
+          "aliases": [
+            "sonnet 5"
+          ]
+        },
+        "sonnet-5.5": {
+          "id": "claude-sonnet-5-5",
+          "cost_input_per_m": 2,
+          "cost_output_per_m": 10,
+          "aliases": [
+            "sonnet",
+            "sonnet 5.5"
+          ]
+        },
+        "opus-5.5": {
+          "id": "claude-opus-5-5",
+          "cost_input_per_m": 4,
+          "cost_output_per_m": 20,
+          "aliases": [
+            "opus 5.5",
+            "opus-5.5",
+            "opus-5-5"
+          ]
         }
       }
     }
@@ -118,7 +243,11 @@
     "cpu_still_limit_ms": 120000,
     "max_execution_time_ms": 600000,
     "check_interval_ms": 5000,
-    "status_checkpoints_ms": [30000, 120000, 240000],
+    "status_checkpoints_ms": [
+      30000,
+      120000,
+      240000
+    ],
     "status_repeat_ms": 120000,
     "description": "İlk 30s veya çıktı sonrası 120s sessizlikte süreç ağacı incelenir. CPU 120s ilerlemezse görev sonlandırılır; 10 dakikalık toplam tavan çıktıdan bağımsız uygulanır."
   },
@@ -130,19 +259,90 @@
     "description": "WrongStack tarzı karantina ve half-open probe mekanizması."
   },
   "routing_rules": {
-    "opencode_keywords": ["opencode", "open code"],
-    "claude_keywords": ["claude", "opus 5.5", "opus-5.5", "opus-5-5"],
-    "complexity_keywords_codex": [
-      "optimizasyon", "mimari", "algoritma", "refactor", "benchmark", "derin", "matematik", "tasarim", "kompleks"
+    "opencode_keywords": [
+      "opencode",
+      "open code"
+    ],
+    "claude_keywords": [
+      "claude"
     ],
     "muse_keywords": [
-      "muse", "spark", "meta", "contributor"
+      "muse",
+      "spark",
+      "meta",
+      "contributor"
     ],
     "codex_keywords": [
-      "codex", "gpt", "openai", "sandbox", "sol", "luna", "astra", "terra"
+      "codex",
+      "gpt",
+      "openai"
     ],
     "gemini_keywords": [
-      "gemini", "antigravity", "sen devam et", "sen yap", "kendin yap", "sen bak", "sen cevapla", "sen orkestre et", "devam et"
-    ]
+      "gemini",
+      "antigravity",
+      "sen devam et",
+      "sen yap",
+      "kendin yap",
+      "sen bak",
+      "sen cevapla",
+      "sen orkestre et",
+      "devam et"
+    ],
+    "complexity_keywords": [
+      "mimari",
+      "algoritma",
+      "refactor",
+      "optimizasyon",
+      "benchmark",
+      "derin analiz",
+      "matematik",
+      "kompleks",
+      "architecture",
+      "algorithm",
+      "complex",
+      "deep dive",
+      "race condition",
+      "distributed",
+      "dagitik",
+      "dağıtık",
+      "security review",
+      "guvenlik incelemesi",
+      "güvenlik incelemesi",
+      "performans",
+      "concurrency"
+    ],
+    "claude_effort_keywords": {
+      "low": [
+        "low effort",
+        "dusuk effort",
+        "düşük effort",
+        "hizli cevap",
+        "hızlı cevap"
+      ],
+      "medium": [
+        "medium effort",
+        "orta effort"
+      ],
+      "high": [
+        "high effort",
+        "yuksek effort",
+        "yüksek effort"
+      ],
+      "xhigh": [
+        "xhigh",
+        "x-high",
+        "cok yuksek effort",
+        "çok yüksek effort",
+        "extra high effort"
+      ],
+      "max": [
+        "max effort",
+        "maksimum effort",
+        "maximum effort",
+        "en yuksek effort",
+        "en yüksek effort",
+        "full effort"
+      ]
+    }
   }
 }
