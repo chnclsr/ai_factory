@@ -26,10 +26,6 @@
     {
       "engine": "muse",
       "model": "muse-spark-1.3-contributor"
-    },
-    {
-      "engine": "codex",
-      "model": "gpt-6-luna"
     }
   ],
   "engines": {

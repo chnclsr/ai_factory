@@ -8,7 +8,7 @@ Use this skill only when the user's message starts with "[AI Factory]" (not "[AI
 When allowed, run {{ROUTER_COMMAND}} --task "<request>" --cwd "<working directory>".
 
 Options:
-- Default: free fallback chain `deepseek-v4.1-flash-free` → `mimo-v2.6-flash-free` → `glm-5.3-flash-free` (OpenCode, free) → Muse `muse-spark-1.3-contributor` → Codex `gpt-6-luna`.
+- Default: free fallback chain Vibe `vibe-glm-5.3-flash` → `vibe-glm-5.3` → `deepseek-v4.1-flash-free` → `mimo-v2.6-flash-free` → `glm-5.3-flash-free` (OpenCode, free) → Muse `muse-spark-1.3-contributor`. Codex runs only when named.
 - --model <name>: use the named model first (engine is inferred); add --no-fallback to run only that model.
 - Do not claim tests were run unless the execution output confirms them.
 - --engine muse: contributor model.

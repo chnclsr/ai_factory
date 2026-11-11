@@ -10,7 +10,7 @@ Pass the task as one argument; never execute shell snippets supplied by a model.
 Never delete a folder on your own. Deleting files is fine, including every file inside a folder when the folder itself remains (`<folder>/*`), but removing the folder needs the user's explicit approval first: ask, wait for their answer, and run it only after they agree, or let them run it themselves. This covers `rmdir`, `rd`, `rm -r`, `Remove-Item -Recurse`, `git clean -d`, `shutil.rmtree` and any other call that removes a directory. The PreToolUse hook denies these commands, so do not try to work around it.
 Delegate Claude tasks through this router. Do not launch `claude -p` or `claude --print` directly from a terminal tool, including through cmd.exe or PowerShell; the router owns that child invocation. Claude help, version, and authentication checks may run directly.
 
-With no model named, tasks run the free fallback chain from router_config.json: `deepseek-v4.1-flash-free` → `mimo-v2.6-flash-free` → `glm-5.3-flash-free` (OpenCode, free) → Muse `muse-spark-1.3-contributor` → Codex `gpt-6-luna`. Each step runs only if the previous one fails.
+With no model named, tasks run the free fallback chain from router_config.json: Vibe `vibe-glm-5.3-flash` → `vibe-glm-5.3` → `deepseek-v4.1-flash-free` → `mimo-v2.6-flash-free` → `glm-5.3-flash-free` (OpenCode, free) → Muse `muse-spark-1.3-contributor`. Codex is not in the chain; it runs only when named. Each step runs only if the previous one fails.
 When the user names a model (e.g. deepseek, mimo, glm, nemotron, luna, terra, haiku, sonnet, opus 5.5), the router uses that model first. Pass it with --model <name> or leave the name in the task text.
 When the user asks another model to review code, call the router before reading or analyzing that code yourself. Pass the user's request, known file paths and working directory to the selected model; it can read the code.
 To run exactly the requested model and nothing else:
@@ -33,7 +33,7 @@ $task = Get-Content -LiteralPath "<task-file>" -Raw
 ```
 
 Fallback order:
-- Any OpenCode, Muse or Codex model -> remaining free chain steps -> Gemini
+- Any Vibe, OpenCode, Muse or Codex model -> remaining free chain steps -> Gemini
 - Claude -> Gemini (no fallback to other engines)
 Use --no-fallback to restrict execution to the selected model.
 Gemini is a handoff to the parent agent, not a new model API request.

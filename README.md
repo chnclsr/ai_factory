@@ -18,7 +18,7 @@ OpenCode is restricted to the free models in [router_config.json](router_config.
 
 | Feature | What it does |
 |---|---|
-| Smart routing | With no model named, runs the free chain `deepseek-v4.1-flash-free` → `mimo-v2.6-flash-free` → `glm-5.3-flash-free` (OpenCode, free) → Muse `muse-spark-1.3-contributor` → Codex `gpt-6-luna`. A model you name (flag or task text) runs first. |
+| Smart routing | With no model named, runs the free chain Vibe `vibe-glm-5.3-flash` → `vibe-glm-5.3` → `deepseek-v4.1-flash-free` → `mimo-v2.6-flash-free` → `glm-5.3-flash-free` (OpenCode, free) → Muse `muse-spark-1.3-contributor`. Codex is not in the chain for now; it runs only when you name it. A model you name (flag or task text) runs first. |
 | Model guardrails | Rejects paid OpenCode IDs and unlisted Claude models; Opus 5.5 requires an explicit request. |
 | Claude delegation check | The Antigravity hook rejects direct headless Claude launches from terminal tools and directs the agent to the router; help and authentication checks remain available. |
 | Free fallback chain | If a model fails, the next free chain step runs; OpenCode models are quarantined individually. Claude hands back to Gemini rather than trying another engine. |
@@ -31,7 +31,7 @@ AGY is instructed to inspect actual progress while a long task runs. If its time
 
 ## Tools and Models
 
-`--engine` chooses the tool; `--model` chooses its model. The table shows the default when you select that tool without a model. With no tool or model selected, the router runs the free chain `deepseek-v4.1-flash-free` → `mimo-v2.6-flash-free` → `glm-5.3-flash-free` (OpenCode, free) → Muse `muse-spark-1.3-contributor` → Codex `gpt-6-luna`, then hands off to Gemini. `--model <name>` alone (or a model name in the task text, such as "glm ile" or "Opus 5.5") selects that model and its engine.
+`--engine` chooses the tool; `--model` chooses its model. The table shows the default when you select that tool without a model. With no tool or model selected, the router runs the free chain Vibe `vibe-glm-5.3-flash` → `vibe-glm-5.3` → `deepseek-v4.1-flash-free` → `mimo-v2.6-flash-free` → `glm-5.3-flash-free` (OpenCode, free) → Muse `muse-spark-1.3-contributor`, then hands off to Gemini. Codex runs only when named. `--model <name>` alone (or a model name in the task text, such as "glm ile" or "Opus 5.5") selects that model and its engine.
 
 | Tool (`--engine`) | CLI used | Default model | Model names accepted with `--model` |
 |---|---|---|---|

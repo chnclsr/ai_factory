@@ -64,7 +64,6 @@ var AI_FACTORY_MODELS = {
     "opencode/deepseek-v4.1-flash-free",
     "opencode/mimo-v2.6-flash-free",
     "opencode/glm-5.3-flash-free",
-    "muse/muse-spark-1.3-contributor",
-    "codex/gpt-6-luna"
+    "muse/muse-spark-1.3-contributor"
   ]
 };

@@ -176,7 +176,10 @@ syncBuiltinESMExports();
 
   result = run('zai-glm-5-3-flash,glm-5-3,opencode/deepseek-v4.1-flash-free,opencode/mimo-v2.6-flash-free,opencode/glm-5.3-flash-free,muse-spark-1.3-contributor', '--task', 'Fix it');
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.equal(calls().at(-1).model, 'gpt-6-luna');
+  // Codex is out of the chain: after Muse the task goes back to Gemini.
+  assert.equal(calls().at(-1).model, 'muse-spark-1.3-contributor');
+  assert.ok(calls().every(c => c.engine !== 'codex'));
+  assert.match(result.stdout, /succeed_with: handoff_to_gemini/);
 
   result = run('', '--task', 'Bunu GLM ile yap');
   assert.equal(result.status, 0, result.stdout + result.stderr);
