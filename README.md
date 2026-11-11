@@ -38,7 +38,7 @@ AGY is instructed to inspect actual progress while a long task runs. If its time
 | Vibe (`vibe`) | `vibe --prompt-file` | `vibe-glm-5.3-flash` (first in the default chain) | `vibe-glm-5.3-flash`, `vibe-glm-5.3`. Complexity keywords (architecture, refactor, ...) select `vibe-glm-5.3`. The CLI's `--model` takes an alias, so `~/.vibe/config.toml` must define the aliases `zai-glm-5-3-flash` and `glm-5-3`. Runs with `--agent auto-approve` and `--output streaming`; named sessions resume via `vibe --resume <id>` |
 | Muse (`muse`) | `muse exec` | `muse-spark-1.3-contributor` | Fixed to `muse-spark-1.3-contributor`; contributor mode is always enabled |
 | Codex (`codex`) | `codex exec` | `gpt-6-luna` | `gpt-6-luna`, `gpt-5.6-luna`, `gpt-5.6-terra` (free tier; Sol/Astra/gpt-5.5 are rejected) |
-| OpenCode (`opencode`) | `opencode run` | `deepseek-v4.1-flash-free` | The 10 configured free models listed below |
+| OpenCode (`opencode`) | `opencode run` | `deepseek-v4.1-flash-free` | The 9 configured free models listed below |
 | Claude Code (`claude`) | `claude -p` | `haiku-5.5` | `haiku-5.5`, `haiku-4.5`, `sonnet-5`, `sonnet-5.5`, `opus-5.5` |
 | Gemini / Antigravity (`gemini`) | Returns control to the calling agent | The calling agent's current model | The router does not select a new model for this handoff |
 
@@ -51,7 +51,7 @@ node router.mjs --engine claude --model opus-5.5 --no-fallback --task "Review th
 OpenCode and Claude also accept the full model IDs from [router_config.json](router_config.json), such as `opencode/mimo-v2.6-flash-free` or `claude-opus-5-5`. Claude Opus 5.5 is selected only when requested explicitly. Codex rejects models outside its configured free-tier list. Muse always uses its fixed contributor model, even if another model is requested.
 
 <details>
-<summary>All 10 configured OpenCode models</summary>
+<summary>All 9 configured OpenCode models</summary>
 
 Use any of these names with `--engine opencode --model <name>`:
 
@@ -59,10 +59,9 @@ Use any of these names with `--engine opencode --model <name>`:
 - `mimo-v2.6-flash-free` (chain step 2)
 - `glm-5.3-flash-free` (chain step 3)
 - `minimax-m3.1-flash-free`
-- `nemotron-3-ultra-free`
 - `nemotron-3.5-lightning-free`
 - `nemotron-3.5-super-vl-free`
-- `longcat-2.5-preview-free`
+- `longcat-2.5-free`
 - `beam-free`
 - `big-pickle`
 

@@ -9,10 +9,9 @@ var AI_FACTORY_MODELS = {
         "mimo-v2.6-flash-free",
         "glm-5.3-flash-free",
         "minimax-m3.1-flash-free",
-        "nemotron-3-ultra-free",
         "nemotron-3.5-lightning-free",
         "nemotron-3.5-super-vl-free",
-        "longcat-2.5-preview-free",
+        "longcat-2.5-free",
         "beam-free",
         "big-pickle"
       ]

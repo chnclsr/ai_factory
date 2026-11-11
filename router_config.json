@@ -76,16 +76,6 @@
             "minimax m3.1"
           ]
         },
-        "nemotron-3-ultra-free": {
-          "id": "opencode/nemotron-3-ultra-free",
-          "cost_input_per_m": 0,
-          "cost_output_per_m": 0,
-          "aliases": [
-            "nemotron",
-            "nemotron ultra",
-            "nemotron 3 ultra"
-          ]
-        },
         "nemotron-3.5-lightning-free": {
           "id": "opencode/nemotron-3.5-lightning-free",
           "cost_input_per_m": 0,
@@ -100,12 +90,13 @@
           "cost_input_per_m": 0,
           "cost_output_per_m": 0,
           "aliases": [
+            "nemotron",
             "nemotron super",
             "nemotron 3.5 super"
           ]
         },
-        "longcat-2.5-preview-free": {
-          "id": "opencode/longcat-2.5-preview-free",
+        "longcat-2.5-free": {
+          "id": "opencode/longcat-2.5-free",
           "cost_input_per_m": 0,
           "cost_output_per_m": 0,
           "aliases": [

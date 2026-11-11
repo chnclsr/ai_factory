@@ -187,7 +187,7 @@ syncBuiltinESMExports();
   assert.deepEqual(calls().map(c => c.model).slice(0, 2), ['gpt-5.6-terra', 'zai-glm-5-3-flash']);
 
   result = run('', '--model', 'nemotron', '--task', 'any');
-  assert.deepEqual(calls().map(c => c.model), ['opencode/nemotron-3-ultra-free']);
+  assert.deepEqual(calls().map(c => c.model), ['opencode/nemotron-3.5-super-vl-free']);
 
   result = run('claude-sonnet-5-5', '--task', 'Use sonnet 5.5 here');
   assert.deepEqual(calls().map(c => c.model), ['claude-sonnet-5-5']);
