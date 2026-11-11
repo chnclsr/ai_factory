@@ -1,0 +1,231 @@
+# ai_factory hafıza katmanı: git tabanlı, sıralı, çok projeli, her sağlayıcıda test edilmiş
+
+## Bağlam
+
+ai_factory'nin router'ı (`src/router.mjs`) bir çağrıdan ötekine bilgi taşımıyor:
+
+- `session_registry.json` global bir sözlük ve projeye bağlı değil. Farklı projelerde aynı adı taşıyan oturumlar birbirinin üzerine yazar (`router.mjs:961`).
+- Kayıt kilit olmadan oku-değiştir-yaz yöntemiyle güncelleniyor. Aynı anda çalışan iki router birbirinin değişikliğini siler.
+- Fallback motor değiştirdiğinde (Vibe → OpenCode → Muse → Codex → Gemini) önceki denemenin bağlamı kayboluyor.
+
+Hedefler:
+
+- Hafıza git'te dursun ve her projede yazmalar tek bir sırayla dizilsin.
+- Proje değiştirme ve aynı projede birden çok oturum desteklensin.
+- **Her sağlayıcıyla çalıştığı testle kanıtlansın.**
+- **Hafıza katmanı neredeyse sıfır maliyetli olsun:** okuma yolunda hiç git süreci başlatılmasın, yazma yolunda en fazla bir tane başlatılsın, motora gönderilen token sıkı bir bütçeyle sınırlansın.
+
+Kullanıcının verdiği kararlar:
+
+- Hafıza ayrı, merkezi bir bare git deposunda duracak; her projenin kendi ref'i olacak.
+- Her projenin tek bir sırası olacak; yeni commit ref'e CAS ile eklenecek.
+- Oturum kimliği otomatik üretilecek, `--name` ise yalnızca bir takma ad olacak.
+
+## 0. Benzer projelerden çıkan bulgular (deep-research, wf_6c15ff4f-f95)
+
+Kaynak: 5 açıdan arama, 20 kaynak, 87 iddia, 25'i doğrulandı (12 doğrulandı, 13 çürütüldü). Örneklem küçük: yaklaşık 7 kaynak. Ayrıntılı tablo çalışma çıktısındadır; buradaki maddeler plana etkisi olanlardır.
+
+- **Yerel SQLite varsayılandır, uzak veritabanı isteğe bağlıdır.** Plan bu modelle uyumlu.
+- **Yalnızca FTS5 aramasının çalışan bir taban olduğu gösterildi** (fellowgeek/mcp-memory, 222 yıldız, vektörsüz). Vektör katmanı zorunlu olmamalı; FTS5 önce gelir (adım 6), vektör ancak kendi ölçümü kazandırırsa açılır.
+- **Mem0 kapsamı üç modla ayırır:** `repo` (varsayılan), `dir` ve `mine`. Proje anahtarı normalize edilmiş git remote'unun hash'idir. Plana eklendi (bkz. bölüm 2).
+- **Mem0 yakalamayı toplu yapar:** beş tamamlanmış alışverişte bir ya da 5 dakikalık boşlukta gönderir; oturum sonu ve sıkıştırmada kalanı boşaltır. Enjeksiyon ilk istemde yapılır, en az 20 karakter şartıyla ve en fazla 5 bellek. Plana eklendi (bkz. bölüm 3).
+- **Çapraz harness paylaşımı nadirdir.** Yalnızca Cognee'nin belgelediği tasarımı var (`~/.cognee/.env` ve ortak veri kümesi; Claude Code ve Codex). Mem0 bunu açıkça dışarıda bırakıyor. Bu, planın ayırt edici özelliği. Cognee'nin Cursor davranışı belirsiz; bu yüzden plan Cursor'ı kapsamaz.
+- **Oturum kimliği `--resume` ile eşleşmiyor.** "Cognee `--resume` ile aynı bellek oturumuna döner" iddiası çürütüldü. Plan zaten iki kimliği ayırıyor (bellek oturumu ve motorun `engine_sessions` kimliği).
+- **Bellek dosyaları bir saldırı yüzeyi.** arXiv 2607.14611 (Bad Memory): Claude Code ve Codex'te bellek dosyasına yerleştirilmiş yükler sonraki oturumları etkiledi. Yeni güvenlik bölümü ve bir test bunu ele alıyor (bölüm 5 ve A11).
+- **claude-handoff** yalnızca Claude Code içindir: handoff'u elle oluşturur, `SessionStart` ile otomatik enjekte eder. Plana elle `memory handoff begin` komutu eklendi (bölüm 4).
+
+## 1. Depo ve sıralı yazma
+
+```
+<DATA_DIR>/memory.git                  bare repo; ref'ler hep gevşek tutulur (packed-refs kullanılmaz)
+  refs/heads/p/<project>               projenin tek sıralı zinciri
+    project.json                       kimlik, aliases (eski adlar)
+    sessions/<sid>.jsonl               oturum günlüğü (yalnız sona eklenir; satırlarda n, ts, engine, kind)
+    sessions/<sid>.meta.json           alias, cwd, engine_sessions{engine: id}, last_injected_seq{engine_sid: seq}
+    sessions/<sid>.summary.md          oturum kapanınca kural tabanlı özet (LLM kullanılmaz)
+    handoffs/<hid>.md                  state open|accepted|expired
+    pages/<slug>.md                    version, supersedes, session
+<DATA_DIR>/memory-index.sqlite         türetilmiş: metin, FTS5, vektör, graf, last_indexed_commit, pack önbelleği
+```
+
+**Git sürecine gerek bırakmayan yazıcı** (`src/memory/gitobj.mjs`). Git'in nesne biçimi basit olduğu için yazıcı JS ile kurulacak:
+
+- blob, tree ve commit nesneleri `sha1` ile adreslenir, `zlib.deflateSync` ile sıkıştırılır ve `objects/xx/yyyy…` altına atomik olarak yazılır (önce tmp, sonra rename).
+- CAS, git'in kendi kilit protokolüyle yapılır: `refs/heads/p/<project>.lock` dosyası `O_EXCL` ile açılır, eski sha doğrulanır, yeni sha yazılıp fsync edilir, kilit dosyası ref'in üzerine rename edilir. Kilit alınamazsa ya da sha değişmişse jitter'lı bir yeniden deneme yapılır; en fazla 8 deneme.
+- Commit trailer'ları: `Seq:` (zincir yüksekliği, proje içindeki toplam sıra), `Session:`, `Engine:`, `Kind:`.
+- Yazar sabittir (`ai-factory <ai-factory@localhost>`) ve imza yoktur. Kullanıcının git yapılandırması devreye girmez.
+- Git CLI yalnızca bakım işlerinde çalışır: `git gc`, `git fsck`, proje birleştirme. Testlerde `git fsck --strict` her nesneyi doğrular.
+- Hedef, Windows'ta bir yazmanın p95 değerinin 15 ms'nin altında kalması. Plumbing ile 5–6 süreç başlatmak yaklaşık 100 ms sürerdi.
+
+Bir router çağrısı tek bir commit üretir. Her oturum yalnızca kendi `sessions/<sid>.*` dosyalarını değiştirdiği için eşzamanlı oturumlar çakışmaz; yeniden deneme yalnızca ağacı yeni ebeveynin üstünde kurar.
+
+**Sayfalarda sürümleme:** Her düzenleme, okuduğu sürümün blob sha'sını `base` olarak taşır. Bu sha güncel sürümle eşleşmiyorsa yeni içerik `version+1` olarak yazılır ve `supersedes` ile `conflict_with` alanları eklenir. Eski sürüm silinmez.
+
+## 2. Proje ve oturum
+
+- **Proje** (`src/memory/project.mjs`): önce `--project` bayrağına bakılır. Sonra `--cwd` dizininden yukarı doğru `.ai-factory.toml` aranır. O da yoksa normalize edilmiş remote kullanılır: önce `upstream`, sonra `origin` (`github.com/acme/api` → `acme-api`). Hiçbiri yoksa klasör adı alınır. Remote, `.git/config` dosyası doğrudan okunarak bulunur; git süreci başlatılmaz. Proje değiştirmek, başka bir `--cwd` ile çağırmak demektir; global bir "aktif proje" tutulmaz.
+- `memory project list|rename|merge` komutları:
+  - `rename`: eski ad `aliases` listesine eklenir.
+  - `merge`: iki zincir bir merge commit ile birleşir.
+- **Arama kapsamı** `--scope` ile seçilir (`repo` varsayılan, `dir`, `mine`). `repo`: proje ref'i. `dir`: yalnızca o `--cwd` altında kaydedilmiş olaylar. `mine`: kullanıcının kendi tercihleri ve kişisel notları; proje ref'inden ayrı bir `personal` ref'inde tutulur, hiçbir zaman proje aramasına karışmaz.
+- Proje anahtarı normalize edilmiş remote'un kısa hash'idir; okunabilir ad yalnızca görüntüleme için kullanılır. Böylece farklı klasörler aynı remote'u paylaşınca aynı projeye düşer.
+- Projeler arası arama yalnızca `--global` ile yapılır.
+- **Oturum** kimlik sırası: `--session`, ardından hook'tan gelen `AI_FACTORY_SESSION_ID`, o da yoksa UUIDv7. `--name`/`--resume` takma adları `(project, alias)` ikilisine göre çözülür.
+- **Geçiş:** `session_registry.json` ilk açılışta okunur. Her kayıt, `cwd`'sinden çözülen projeye `legacy-<ad>` kimliğiyle taşınır. Dosya `.migrated` uzantısıyla saklanır. `cwd` değeri olmayan kayıtlar `_unscoped` projesine düşer ve bunun için uyarı ile düzeltme komutu yazılır.
+
+## 3. Ultra verimli bağlam enjeksiyonu
+
+Asıl verim buradan gelir: motora yalnızca gereken bilgi ve yalnızca bir kez gönderilir.
+
+- **Delta enjeksiyonu.** Her motor oturumu için `last_injected_seq` tutulur. `--resume` aynı motor oturumunu sürdürüyorsa motorun önceki bağlamı zaten vardır; bu yüzden yalnızca o seq'ten sonra gelen commit'lerin özeti gönderilir. Değişiklik yoksa hiçbir şey eklenmez. Yeni bir motora (yeni oturum ya da fallback) tam paket gider.
+- **Katmanlı paket**, düşük katman önce dolar ve bütçe dolunca durur:
+  - L0: açık handoff ve fallback'te önceki denemenin hatası (en fazla 300 token)
+  - L1: bu oturumun özeti ve son N olay (en fazla 400 token)
+  - L2: aramadan gelen sayfalar (bütçenin kalanı)
+- **İlk istem kapısı.** Enjeksiyon yalnızca görev metni en az 20 karakter ise yapılır; en fazla 5 sayfa ya da özet girer. Kısa komutlar (ör. "devam") bütçe harcamaz; bunlar delta ile zaten sürdürülür.
+- **Toplu yakalama.** Router çağrısı tek commit üretir (bölüm 1). Hook kaynaklı olaylar (Antigravity) 5 olayda ya da 5 dakikalık boşlukta toplu yazılır; oturum sonu ve sıkıştırma kalanı boşaltır. Yazma sayısı böylece olay sayısına değil oturum sayısına yakın kalır.
+- **Model başına bütçe.** `router_config.json` içindeki her modele `memory_budget_tokens` alanı eklenir. Küçük ve ücretsiz modellere (vibe flash, opencode free) 800 civarı, Claude ve Codex'e 2000 civarı token ayrılır. Token sayısı `karakter/4` ile yaklaşık hesaplanır, tokenizer çalıştırılmaz.
+- **İçerik adresli önbellek.** Paket, `(project head sha, session, engine, budget, query hash)` anahtarıyla önbelleğe alınır. Proje değişmediyse paket yeniden kurulmaz.
+- **Okuma yolunda git süreci yok.** Ref sha'sı doğrudan dosyadan okunur. İndeks bu sha'nın gerisindeyse yalnızca aradaki commit'ler JS ile açılıp işlenir; metin SQLite'tan gelir.
+- **Kanal:** her motor görevini zaten bir dosyadan alıyor (codex ve claude stdin'den, opencode `--file` ile, vibe ve muse `--prompt-file` ile). Paket bu dosyanın başına `<retrieved-memory untrusted="true">` bloğu olarak eklenir. Komut satırı uzunluğu sınırına takılma riski yoktur.
+- Kopyalar, git'in içerik adreslemesi sayesinde zaten tek nesne olarak saklanır. Özetler kural tabanlı üretilir, LLM çağrısı yapılmaz.
+
+## 3b. Aynı oturumda model değiştirmek: sohbet ve dosya değişiklikleri
+
+Aynı oturumda modeller sırayla kullanılabilir (ör. Claude, ardından Codex, ardından tekrar Claude). Her motorun kendi yerel oturumu yalnızca kendi konuşmasını bilir. Bu yüzden ortak kayıt hafızada tutulur: her router çağrısı bir **tur** olarak yazılır.
+
+**Tur kaydı.** `sessions/<sid>.jsonl` dosyasına her çağrı için bir satır eklenir:
+
+```
+{n, ts, engine, model, engine_session, ok, task, response_head, response_ref,
+ wt_before, wt_after, files:[{path, status, +add, -del}], patch_ref}
+```
+
+- `task` ve yanıtın ilk 2 KB'ı (`response_head`) satırda durur. Yanıtın tamamı, en fazla 256 KB olacak şekilde, `sessions/<sid>/turns/<n>.response.md` dosyasına yazılır.
+- Hepsi sanitizer'dan geçer. Aynı commit'e girer, böylece Seq sırası korunur.
+
+**Dosya değişiklikleri** (`src/memory/worktree.mjs`). Her çağrıdan önce ve sonra kullanıcının projesinin anlık görüntüsü alınır:
+
+- Proje git deposuysa: `GIT_INDEX_FILE=<tmp> git add -A` ve ardından `git write-tree` çalıştırılır. Bu yöntem kullanıcının index'ine ve çalışma ağacına dokunmaz, `.gitignore`'a uyar ve izlenmeyen yeni dosyaları da yakalar. Sonuç `wt_before` ve `wt_after` tree sha'larıdır.
+- İki tree arasındaki `git diff --numstat` ve patch, **yalnızca bu turda yapılan** değişikliği verir. Kullanıcının daha önce commit etmediği işler bu turun değişikliği sayılmaz.
+- Patch sanitize edilir, en fazla 512 KB olacak şekilde sınırlanır ve `sessions/<sid>/turns/<n>.patch` dosyasına yazılır. Binary dosyalar için yalnızca yol ve boyut tutulur.
+- Proje git deposu değilse yol, boyut ve mtime ile bir anlık görüntü alınır (en fazla 20 bin dosya). Bu durumda yalnızca değişen dosyaların listesi tutulur, patch tutulmaz.
+- Kullanıcının deposuna erişilemiyorsa ya da işlem 2 saniyeyi aşarsa dosya değişikliği kaydı atlanır, tur yine de yazılır ve `files: "unavailable"` olarak işaretlenir. Hafıza hiçbir zaman görevi durdurmaz.
+- Hesap yalnızca `memory.track_files=true` olduğunda yapılır (varsayılan açık). Okuma yoluna hiç ek maliyet getirmez. Çağrı başına 4 git süreci başlatır; 10 bin dosyalık bir depoda hedef 300 ms'nin altı.
+
+**Model değişince ne gönderilir.** Yeni bir motora ya da başka bir motordan sonra geri dönen motora, `last_injected_seq` değerinden sonraki turlar gönderilir:
+
+- **L1 sohbet:** son K tur `görev → yanıtın başı` biçiminde aynen, daha eski turlar tek satırlık özetlerle verilir. Bütçe dolunca durulur.
+- **L1 dosyalar:** bu turlarda değişen dosyalar ve `+/-` satır sayıları. Patch'in kendisi gönderilmez, çünkü motor güncel dosyayı zaten diskten okuyabilir. Yalnızca dosya silinmişse ya da yeniden adlandırılmışsa bu açıkça yazılır.
+- Örnek: Claude 1. turda `a.ts` dosyasını değiştirdi, ardından Codex çağrıldı. Codex'e şu gider: "1. tur (claude/haiku-5.5): <görev> → <yanıtın başı>; değişen: a.ts +12 −3". Ardından Claude tekrar çağrılırsa ona yalnızca Codex'in turu gider.
+
+**Ek komutlar:**
+
+- `memory session show <ad|sid>`: turları, motorları ve dosyaları listeler.
+- `memory turn diff <n>`: kayıtlı patch'i gösterir.
+- `memory turn revert <n>`: `wt_after` ile `wt_before` arasındaki farkın tersini `git apply -R --3way` ile uygular. Uygulamadan önce kullanıcıya etkilenen dosyaları gösterir ve onay ister.
+
+## 4. Handoff
+
+- Fallback zincirinde motor değiştiğinde (`router.mjs:899` döngüsü) L0 paketi yeni motorun görev dosyasına eklenir.
+- Gemini'ye devredildiğinde ya da tüm motorlar başarısız olduğunda `handoffs/<hid>.md` dosyası `state: open` ile yazılır. Rapora `handoff: <hid>` satırı eklenir.
+- **Elle handoff:** `memory handoff begin --to <motor|any>` komutu aynı dosyayı kullanıcı isteğiyle oluşturur (claude-handoff'un elle oluşturma deseni). Otomatik ve elle handoff aynı durum makinesini paylaşır.
+- Handoff'un alınması, `open → accepted` değişikliğini yapan bir CAS commit'idir; bu yüzden yalnızca bir kez alınabilir.
+- Hook (`plugins/ai-factory/hooks/hook_handler.js`), `PreInvocation` sırasında açık handoff'u kural metnine ekler. Yalnızca dosya okur, 50 ms'yi aşmaz, hata olursa `allow` döner.
+
+## 5. Güvenlik
+
+- `src/memory/sanitize.mjs`: yazılan her metin önce buradan geçer. Maskelenen desenler: `sk-…`, `ghp_…`, Telegram bot token, `Bearer`, `.env` atamaları. Olay başına boyut sınırı uygulanır.
+- `.ai-factory.toml` içinde `ignore_paths` tanımlanır (`.runtime/`, `telegram-config.json`, watchdog logları).
+- Hafızadan okunan içerik talimat olarak değil, veri olarak işaretlenir.
+- **Bellek kaynaklı enjeksiyon (Bad Memory bulgusu).** İşaretleme tek başına yetmez; bellek dosyaları oturum açılışında yüksek güvenle yüklenir. Üç katman uygulanır:
+  1. Yazma anında: yanıt ve görev metni sanitizer'dan geçer, kalıp dışı talimat benzeri bloklar (`ignore previous`, `system:`, sahte `<retrieved-memory>` etiketleri) etiketlenir ve enjekte edilmez.
+  2. Motorlar arası yayılım: bir motorun yanıtı başka bir motora yalnızca "veri" olarak gider; bir sonraki motorun talimat dosyasına (`AGENTS.md`, `CLAUDE.md`, `GEMINI.md`) hiçbir zaman yazılmaz.
+  3. Kayıt: her enjekte edilen bloğun kaynak tur numarası ve hash'i günlüğe düşer; bir yük ortaya çıkarsa hangi turdan geldiği izlenir ve `memory turn revert` ile geri alınabilir.
+- Kayıt ayrı izinlerle tutulur (`0700`); bellek deposu hiçbir zaman harness'in otomatik yüklediği bir dizinde durmaz.
+- `AI_FACTORY_ROUTER_DEPTH > 0` olduğunda enjeksiyon yapılmaz.
+- `memory.enabled=false` olduğunda router'ın davranışı bugünküyle birebir aynı kalır.
+
+## 6. Sağlayıcı uyumluluk matrisi ve testleri
+
+| Motor | Görev kanalı | Oturum kimliğinin kaynağı | Resume | Doğrulanacak |
+|---|---|---|---|---|
+| vibe | `--prompt-file` | çıktıdan (`extractSessionId`) | `--resume <id>`, model sabit | yeni, resume (delta), fallback girişi |
+| opencode | `--file` eki | JSON `ses_…` | `--session` | yeni, resume, fallback girişi, model başına sağlık |
+| muse | `--prompt-file` | router üretir (`--session-id`) | aynı id | yeni, resume; kimlik her zaman bilinir |
+| codex | stdin | çıktıdan | `exec resume <id>` (cwd `runCommand` ile gelir) | yeni, resume, fallback girişi |
+| claude | stdin | JSON `session_id` | `--resume` | yeni, resume, model değişimiyle resume |
+| gemini | handoff, prompt yok | Antigravity konuşma kimliği | yok | handoff dosyası, hook enjeksiyonu, tek seferlik alma |
+
+**A. Sözleşme testleri (CI'da her zaman çalışır).** `src/router.engines.test.mjs` içindeki `childProcess.spawn` yakalama deseni genişletilir. Her motor için sahte bir CLI görev dosyasını ya da stdin'i okur ve kaydeder. Her motor ve senaryo için şunlar doğrulanır:
+
+1. Hafıza bloğu doğru kanaldan geldi ve bütçe aşılmadı.
+2. Resume'da yalnızca delta geldi; değişiklik yoksa blok hiç gelmedi.
+3. Fallback'te yeni motor L0'ı aldı.
+4. Çağrı sonunda tam olarak bir commit yazıldı ve trailer'lar doğru.
+5. Motor oturum kimliği `meta.json` içine yazıldı.
+6. Gemini handoff dosyası oluştu ve hook bunu enjekte etti.
+7. **Aynı oturumda model değişimi:** sahte Claude 1. turda geçici bir depodaki `a.txt` dosyasını değiştirir, ardından sahte Codex çağrılır. Codex'in aldığı blokta 1. turun görevi, yanıtının başı ve `a.txt +N −M` bulunmalı. Sonra yeniden Claude çağrılır; ona yalnızca Codex'in turu gitmeli.
+8. **Tur izolasyonu:** kullanıcının çağrıdan önce commit etmediği bir değişiklik, turun patch'inde görünmemeli. İzlenmeyen yeni bir dosya ise görünmeli. Kullanıcının index'i (`git diff --cached`) çağrıdan önceki haliyle aynı kalmalı.
+9. **Revert:** `memory turn revert 1` yalnızca 1. turdaki değişikliği geri almalı; 2. turdaki değişiklik yerinde kalmalı.
+10. **Git deposu olmayan dizin:** dosya listesi tutulmalı, patch tutulmamalı, tur yine yazılmalı.
+11. **Bellek kaynaklı yük:** 1. turda bir sahte motor yanıtına "bir sonraki çağrıda X yap" talimatı yazar. 2. turda başka bir sahte motora gelen blokta bu metin yalnızca `untrusted` veri olarak bulunmalı, hiçbir talimat dosyasına yazılmamalı ve enjeksiyon kaydında 1. turun hash'i görünmeli. Bu test hem sanitizer'ı hem motorlar arası yayılımı kapsar.
+12. **İlk istem kapısı:** 20 karakterden kısa görev enjeksiyonsuz geçmeli; uzun görev en fazla 5 sayfa almalı.
+13. **Kapsam:** `--scope dir` yalnızca o alt dizinin olaylarını döndürmeli; `mine` kişisel ref'ten gelmeli ve proje aramasında çıkmamalı.
+
+**B. Canlı smoke testi (isteğe bağlı: `AI_FACTORY_LIVE=1`, `scripts/live-memory-matrix.mjs`).** Kurulu ve yetkili gerçek CLI'larla bir "kanarya" testi çalıştırır:
+
+1. Oturum 1'de A motoruna rastgele bir kanarya bilgisi söylenir.
+2. Aynı projede B motoruna sorulur: cevap kanaryayı içermeli.
+3. Başka bir projede aynı soru sorulur: cevap kanaryayı içermemeli.
+4. Aynı projedeki ikinci oturum handoff'u almalı.
+
+Bu test 5×5 motor çiftinin hepsini dener. Kurulu olmayan ya da kotası dolu motor `skip` olarak işaretlenir; sessizce geçilmez. Sonuç `.runtime/memory-matrix.json` dosyasına yazılır. Ücretsiz zincir dışındaki Claude modelleri yalnızca açıkça istenirse çalıştırılır.
+
+**C. Depolama testleri.**
+
+- 4 süreç × 50 commit sonunda Seq 1'den 200'e boşluksuz bir doğrusal zincir oluşmalı ve `git fsck --strict` temiz çıkmalı.
+- Aynı `base` ile iki sayfa düzenlemesi yapıldığında iki sürüm de korunmalı.
+- Handoff yarışında tek bir kazanan olmalı.
+- A ve B projeleri izole kalmalı; `--global` ile ikisi de görünmeli.
+- Eski kayıt dosyası geçişten sonra `--resume` ile aynı motor oturumunu bulmalı.
+- Sanitizer token'ı maskelemeli.
+
+**D. Verim benchmark'ı (`scripts/bench-memory.mjs`, CI'da eşik kontrolüyle).** 10 bin olay ve 1000 sayfalık bir fixture üzerinde ölçülecek hedefler:
+
+| Ölçüm | Hedef |
+|---|---|
+| Yazma p95 | < 15 ms |
+| Paket kurma p95, sıcak | < 10 ms |
+| Paket kurma p95, soğuk | < 40 ms |
+| Okuma yolunda başlatılan git süreci | 0 |
+| Enjekte edilen token | her zaman bütçenin altında |
+| Değişiklik yokken resume'da enjekte edilen token | 0 |
+| Kanarya eval setinde recall@5 | ≥ 0.95 |
+
+## 7. Geliştirme sırası
+
+Her adım ayrı bir PR olacak ve kendi testleriyle gelecek.
+
+1. `gitobj.mjs` (nesne yazıcı, CAS), `project.mjs`, `sanitize.mjs`; `lib/paths.mjs` içine `MEMORY_REPO` ve `MEMORY_INDEX` eklenir. Testler: C ve D'nin yazma kısmı.
+2. Tur kaydı ve dosya izleme: `worktree.mjs`. Her `execute*` çağrısının öncesinde ve sonrasında anlık görüntü alınır (`router.mjs:916`). `main()` sonunda (`router.mjs:954` civarı) her çağrı için tek bir commit yazılır. Testler: A8–A10.
+3. Oturumlar: `--session`/`--project` bayrakları (`parseCliArgs`, `router.mjs:466`), proje kapsamlı takma adlar, kayıt geçişi.
+4. Enjeksiyon: tüm `execute*` fonksiyonlarındaki prompt dosyası yazımı (`router.mjs:614–756`) tek bir `buildPrompt(task, pack)` yardımcısından geçer. Delta, katmanlar (sohbet ve dosya özeti dahil), bütçe ve önbellek burada kurulur. Testler: A1–A5, A7.
+5. Handoff, elle handoff komutu ve hook. Testler: A6, A11, C'deki yarış testi.
+6. İndeks: `node:sqlite` ile FTS5, commit'leri JS ile okuyarak senkronizasyon, L2 araması. Testler: D'nin geri kalanı.
+7. Proje işlemleri (`rename`, `merge`, `--global`) ve canlı matris (B).
+8. Vektör katmanı ve ChunkSplice: eşiğin altında brute-force, eşiğin üstünde graf (önceki plandaki Faz 0–5).
+
+## Açık sorular ve sınırlar
+
+- Benzer repolar (claude-mem, agentmemory, basic-memory, Zep/Letta) bu araştırmada doğrulanmadı. `docs/comparison.md` bu nedenle güncellenmedi; ayrı bir araştırma gerekir.
+- Bad Memory makalesinin PDF gövdesi okunmadı; kalıcılık oranları yalnızca özet üzerinden geldi, bu yüzden plan sayısal değerlere dayanmıyor.
+- ai-memory hakkında araştırmada çürütülen iki iddia (Markdown kaynak olarak, sıfır LLM varsayılanı) doğrudan kod ve belgeyle kontrol edilmeli. Bu, ai-memory'nin tasarımının yanlış olduğu anlamına gelmez.
+- Cognee'nin paylaşımlı modu yalnızca belgelerden okundu, çalışma zamanında doğrulanmadı.
+
+## Doğrulama
+
+- `npm test`: mevcut testler ve A, C testleri geçmeli. `node:sqlite` için Node ≥ 22.13 gerekir; `package.json` içindeki `engines` alanı buna göre güncellenir.
+- `node scripts/bench-memory.mjs`: D'deki eşiklerin hepsi geçmeli.
+- `AI_FACTORY_LIVE=1 node scripts/live-memory-matrix.mjs`: kurulu her motor için kanarya testi geçmeli, kurulu olmayanlar `skip` olarak raporlanmalı.
+- Elle kontrol: `git -C .runtime/memory.git log --format='%H %(trailers)' refs/heads/p/<proje>` komutuyla zincirin sırası ve trailer'lar incelenir.
