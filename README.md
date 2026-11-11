@@ -275,6 +275,14 @@ Before each attempt the engine's task file starts with a `<retrieved-memory untr
 | `l0_tokens` / `l1_tokens` | `300` / `400` | Caps for the handoff/previous-error layer and the session-turns layer |
 | `recent_turns_verbatim` | `3` | Newest unseen turns shown with task and reply; older ones get one line |
 
+Handoffs: when a call ends in a Gemini handoff, or every engine fails, memory writes an open handoff and the report gains a `handoff: <id>` line. The plugin hook shows open handoffs for the current project to Antigravity, inside the same untrusted block, together with the command that takes one. A router engine sees open handoffs addressed to it (or to `any`) in its block, and a successful call takes them. Taking a handoff succeeds exactly once, however many agents try at the same time.
+
+```bash
+node router.mjs memory handoff begin --to codex --task "Port the CSV exporter to streams" --cwd <project>
+node router.mjs memory handoff list --cwd <project>
+node router.mjs memory handoff accept <id> --cwd <project>
+```
+
 Each model entry in `engines.*.models` also has `memory_budget_tokens`: 800 for the free Vibe, OpenCode and Muse models, 2000 for Codex and Claude. Tokens are estimated as characters divided by 4.
 
 ### Live Quota Status Check

@@ -5,6 +5,9 @@
 //   memory turn revert <n> [--session <s>] [--yes]
 //                                               reverse turn n's patch in the working tree
 //   memory session adopt <alias>                move a migrated _unscoped session into this project
+//   memory handoff begin --to <engine|any> [--task <text>] [--session <s>]
+//   memory handoff list [--all]
+//   memory handoff accept <hid>                 take an open handoff (exactly one taker wins)
 //   memory note add <text> [--scope repo|mine]  store a note page (mine = personal ref)
 //   memory search <query> [--scope repo|dir|mine]
 
@@ -13,6 +16,7 @@ import { resolveProject, findGitRepo, UNSCOPED_PROJECT } from './project.mjs';
 import { snapshotProject, commitProject, writePage } from './store.mjs';
 import { findSession, listSessions, readTurns, readMeta, sessionPaths, ALIASES_FILE } from './session.mjs';
 import { search, SCOPES } from './search.mjs';
+import { beginHandoff, claimHandoff, listHandoffs, isValidHandoffId } from './handoff.mjs';
 import { revertPatch } from './worktree.mjs';
 import { sanitizeValue } from './sanitize.mjs';
 
@@ -103,6 +107,34 @@ export async function runMemoryCli(argv, { repoDir, cwd = process.cwd(), io: ioO
     return 0;
   }
 
+  if (group === 'handoff') {
+    if (action === 'begin') {
+      const to = (flags.to || 'any').toLowerCase();
+      if (!['any', 'gemini', 'vibe', 'opencode', 'muse', 'codex', 'claude'].includes(to)) { io.err(`Unknown handoff target: ${to}\n`); return 1; }
+      const sid = pickSession(snapshot, flags.session);
+      const lastTurn = sid ? readTurns(snapshot, sid).filter(t => t.kind === 'turn').at(-1) : null;
+      const task = flags.task || lastTurn?.task || '';
+      if (!task) { io.err('Nothing to hand off: pass --task or run a session first.\n'); return 1; }
+      const hid = beginHandoff(repoDir, project.key, { to, fromSession: sid || '', fromEngine: 'user', reason: flags.reason || 'manual handoff', task });
+      io.out(`handoff: ${hid}\n`);
+      return 0;
+    }
+    if (action === 'list') {
+      const all = listHandoffs(snapshot).filter(h => flags.all !== undefined || h.state === 'open');
+      for (const h of all) io.out(`${h.id} ${h.state} to=${h.to} from=${h.from_engine || '-'} (${h.reason || '-'}): ${String(h.task).split('\n')[0].slice(0, 100)}\n`);
+      if (!all.length) io.out('(no open handoffs)\n');
+      return 0;
+    }
+    if (action === 'accept') {
+      if (!isValidHandoffId(arg)) { io.err('Usage: memory handoff accept <handoff id>\n'); return 1; }
+      const claim = claimHandoff(repoDir, project.key, arg, flags.by || 'user');
+      if (!claim.ok) { io.err(`Handoff ${arg} was not taken: it is ${claim.state}.\n`); return 3; }
+      const handoff = listHandoffs(snapshotProject(repoDir, project.key)).find(h => h.id === arg);
+      io.out(`Accepted ${arg}.\n${handoff?.task || ''}\n`);
+      return 0;
+    }
+  }
+
   if (group === 'note' && action === 'add') {
     const text = positional.slice(2).join(' ').trim();
     const scope = flags.scope === 'mine' ? 'mine' : 'repo';
@@ -157,6 +189,7 @@ export async function runMemoryCli(argv, { repoDir, cwd = process.cwd(), io: ioO
   }
 
   io.err('Usage: node router.mjs memory session show [<alias|sid>] | session adopt <alias> | turn diff <n> | turn revert <n> [--yes]\n' +
-    '       | note add <text> [--scope repo|mine] | search <query> [--scope repo|dir|mine]\n');
+    '       | note add <text> [--scope repo|mine] | search <query> [--scope repo|dir|mine]\n' +
+    '       | handoff begin --to <engine|any> [--task <text>] | handoff list [--all] | handoff accept <hid>\n');
   return 1;
 }

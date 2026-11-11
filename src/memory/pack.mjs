@@ -39,8 +39,10 @@ export function estimateTokens(text) {
   return Math.ceil(String(text || '').length / 4);
 }
 
+// Neutralises before collapsing whitespace: several instruction patterns are anchored to the start
+// of a line and would be missed once the text is on one line.
 export function clip(text, maxChars) {
-  const clean = String(text || '').replace(/\s+/g, ' ').trim();
+  const clean = neutralizeForInjection(String(text || '')).replace(/\s+/g, ' ').trim();
   return clean.length <= maxChars ? clean : clean.slice(0, Math.max(0, maxChars - 1)) + '…';
 }
 
@@ -253,19 +255,22 @@ export function benchPack({ repo, project, sessionIds, countSpawns, dir }) {
   let maxRatio = 0;
   let overBudget = 0;
   let spawns = 0;
-  for (let i = 0; i < 50; i++) {
-    const req = { ...base, sid: sessionIds[i % sessionIds.length], task: `Refactor the router fallback and session handling, case ${i}` };
+  const requests = Array.from({ length: 50 }, (_, i) =>
+    ({ ...base, sid: sessionIds[i % sessionIds.length], task: `Refactor the router fallback and session handling, case ${i}` }));
+  for (const req of requests) {
     memo.clear();
-    const first = time(() => countSpawns(() => buildPack(req)));
-    spawns += first.value.count;
+    const first = time(() => buildPack(req));
     cold.push(first.ms);
-    const pack = first.value.value;
-    if (pack.tokens > pack.budget) overBudget++;
-    maxRatio = Math.max(maxRatio, pack.tokens / pack.budget);
+    if (first.value.tokens > first.value.budget) overBudget++;
+    maxRatio = Math.max(maxRatio, first.value.tokens / first.value.budget);
+    // Warm: a new process would find this pack in the on-disk cache, not in the in-process memo.
     memo.clear();
-    const second = time(() => countSpawns(() => buildPack(req)));
-    spawns += second.value.count;
-    warm.push(second.ms);
+    warm.push(time(() => buildPack(req)).ms);
+  }
+  // Spawn counting patches child_process, so it runs separately from the timed builds.
+  for (const req of requests.slice(0, 10)) {
+    memo.clear();
+    spawns += countSpawns(() => buildPack({ ...req, cacheDir: null })).count;
   }
   // No-change resume: an engine session whose last known Seq is the head gets nothing.
   const sid = sessionIds[0];

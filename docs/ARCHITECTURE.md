@@ -20,7 +20,7 @@ The per-engine health gate checks cached quota and circuit-breaker state before 
 
 ## Report contract
 
-Every completed router invocation prints an `[AI FACTORY EXECUTION REPORT]` with `path`, `choices`, `errors`, and `succeed_with`. `path` starts with `gemini` as the caller label and includes only engines attempted **inside that invocation**. It cannot reconstruct earlier independent router calls. `[OK]` on a Gemini handoff means delegation occurred; the parent agent must still complete and verify the task. Callers should quote the report rather than infer success from a model's prose.
+Every completed router invocation prints an `[AI FACTORY EXECUTION REPORT]` with `path`, `choices`, `errors`, and `succeed_with`. With memory enabled, a Gemini handoff or an all-engines failure adds `handoff: <id>` after `succeed_with`. `path` starts with `gemini` as the caller label and includes only engines attempted **inside that invocation**. It cannot reconstruct earlier independent router calls. `[OK]` on a Gemini handoff means delegation occurred; the parent agent must still complete and verify the task. Callers should quote the report rather than infer success from a model's prose.
 
 ## Memory layer
 
@@ -37,6 +37,8 @@ Every completed router invocation prints an `[AI FACTORY EXECUTION REPORT]` with
 | `migrate.mjs` | One-time move of `session_registry.json` into per-project sessions (`legacy-<name>`), then renames it `.migrated` |
 | `search.mjs` | Scoped term search over pages and turns: `repo`, `dir` (by recorded cwd), `mine` (the separate `refs/heads/personal` ref) |
 | `pack.mjs` | Builds the `<retrieved-memory untrusted="true">` block: delta since the engine session's last known Seq, layers L0 (earlier error) → L1 (unseen session turns with file changes) → L2 (related notes and other sessions' turns), per-model token budget, a 20-character task gate, and a content-addressed cache in `DATA_DIR/memory-cache/` |
+| `handoff.mjs` | `handoffs/<hid>.md` state machine (`open → accepted`); automatic handoffs ride in the turn's commit, `claimHandoff` flips the state under the ref lock so exactly one taker wins; contributes open handoffs to L0 |
+| `hook.mjs` | Read-only lookup the plugin hook imports with a 50 ms deadline to show open handoffs for the session's project |
 | `index.mjs` | The facade the router calls; every method catches its own errors and logs `[AI Factory Memory] …` |
 | `cli.mjs` | `node router.mjs memory …` inspection and revert commands |
 

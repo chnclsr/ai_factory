@@ -11,6 +11,7 @@ import { snapshotProject } from './store.mjs';
 import { migrateRegistry } from './migrate.mjs';
 import { SCOPES } from './search.mjs';
 import { buildPack, buildPrompt as buildPackedPrompt, PACK_DEFAULTS } from './pack.mjs';
+import { newHandoffId, writeHandoff, acceptInView } from './handoff.mjs';
 import path from 'node:path';
 
 export const LOG_PREFIX = '[AI Factory Memory]';
@@ -108,7 +109,26 @@ export function createMemory({ repoDir, dataDir, memoryConfig = {}, routerConfig
       const after = takeSnapshot(ctx.cwd, { ignorePaths: ctx.project.ignorePaths, budgetMs: settings.file_budget_ms, enabled: settings.track_files });
       const diff = diffSnapshots(ctx.before, after, { budgetMs: settings.file_budget_ms });
       if (diff.files === 'unavailable') warn(`file changes not recorded: ${diff.reason}`);
-      return recordTurnCommit(repoDir, ctx, outcome, { after, diff });
+      // A Gemini handoff, or every engine failing, leaves an open handoff in the same commit.
+      let handoff = null;
+      if (outcome.succeedWith === 'handoff_to_gemini') handoff = { to: 'gemini', reason: outcome.handoffReason || 'handed to gemini' };
+      else if (!outcome.succeedWith && !outcome.aborted) handoff = { to: 'any', reason: 'all engines failed' };
+      const handoffId = handoff ? newHandoffId() : null;
+      const taken = outcome.ok ? (ctx.injected || []).filter(i => i.kind === 'handoff').map(i => i.id) : [];
+      const accepted = [];
+      const result = recordTurnCommit(repoDir, ctx, outcome, {
+        after, diff, handoffId,
+        mutate(view, { n }) {
+          if (handoff) {
+            writeHandoff(view, { hid: handoffId, to: handoff.to, reason: handoff.reason, fromSession: ctx.sid,
+              fromEngine: outcome.engine, task: outcome.task, errors: outcome.attempts || [] });
+          }
+          // An engine that was shown an open handoff and finished the call has taken it; under the
+          // ref lock only the first such commit can flip it from open.
+          for (const hid of taken) if (acceptInView(view, hid, `${outcome.engine}:${ctx.sid}#${n}`)) accepted.push(hid);
+        }
+      });
+      return { ...result, handoffId, accepted };
     });
   }
 

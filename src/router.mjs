@@ -882,6 +882,10 @@ Kullan\u0131m:
   }
 
   if (targetEngine === 'gemini') {
+    const geminiHandoff = memory ? memory.recordTurn(memoryCtx, {
+      task: options.task, engine: 'gemini', model: 'gemini', ok: false, succeedWith: 'handoff_to_gemini',
+      handoffReason: 'routed to gemini', output: '', attempts: []
+    }) : null;
     console.log(`\n[AI Factory Mandate] Görev Antigravity (Gemini)'ye devredildi. Sen devam et.\n`);
     console.log('='.repeat(60));
     console.log('[AI FACTORY EXECUTION REPORT]');
@@ -889,6 +893,7 @@ Kullan\u0131m:
     console.log('choices: gemini');
     console.log('errors: none');
     console.log('succeed_with: handoff_to_gemini');
+    if (geminiHandoff?.handoffId) console.log(`handoff: ${geminiHandoff.handoffId}`);
     console.log('='.repeat(60) + '\n');
     process.exit(0);
   }
@@ -1009,14 +1014,13 @@ Kullan\u0131m:
     }
   }
 
-  if (memory) {
-    memory.recordTurn(memoryCtx, {
-      task: options.task, engine: targetEngine, model: targetModel,
-      ok: Boolean(succeedWith) && succeedWith !== 'handoff_to_gemini', succeedWith,
-      engineSessionId: lastSessionId || extractSessionId(lastOutput) || resumeSessionId,
-      output: lastOutput, attempts: errors
-    });
-  }
+  const memoryResult = memory ? memory.recordTurn(memoryCtx, {
+    task: options.task, engine: targetEngine, model: targetModel,
+    ok: Boolean(succeedWith) && succeedWith !== 'handoff_to_gemini', succeedWith,
+    aborted: options.engine === 'aborted', handoffReason: 'fallback chain exhausted',
+    engineSessionId: lastSessionId || extractSessionId(lastOutput) || resumeSessionId,
+    output: lastOutput, attempts: errors
+  }) : null;
 
   // Standart Rapor \u00c7\u0131kt\u0131s\u0131 (Path zinciri ile)
   const pathStr = pathSteps.join(' --> ');
@@ -1029,6 +1033,7 @@ Kullan\u0131m:
   console.log(`choices: ${choices.join(', ')}`);
   console.log(`errors: ${errorsStr}`);
   console.log(`succeed_with: ${succeedStr}`);
+  if (memoryResult?.handoffId) console.log(`handoff: ${memoryResult.handoffId}`);
   console.log('='.repeat(60) + '\n');
 
   process.exit(succeedWith ? 0 : 1);

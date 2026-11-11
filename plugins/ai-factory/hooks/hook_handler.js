@@ -80,6 +80,33 @@ function removesDirectory(script) {
   return false;
 }
 
+// Open memory handoffs for the session's project, appended to the injected rule. The lookup only
+// reads files; it gets 50 ms, and on timeout or any error the rule goes out without it.
+const MEMORY_DEADLINE_MS = 50;
+
+function payloadCwd(payload) {
+  for (const value of [payload.cwd, payload.workspaceRoot, payload.workspace_root, payload.workspace && payload.workspace.path]) {
+    if (typeof value === 'string' && value && path.isAbsolute(value)) return value;
+  }
+  return process.cwd();
+}
+
+function memoryNotice(installation, payload, routerCommand) {
+  const root = installation.root || path.dirname(String(installation.router || ''));
+  const work = (async () => {
+    const { pathToFileURL } = require('node:url');
+    const hook = await import(pathToFileURL(path.join(root, 'src', 'memory', 'hook.mjs')).href);
+    return hook.handoffNotice({
+      dataDir: path.resolve(process.env.AI_FACTORY_DATA_DIR || path.join(root, '.runtime')),
+      configFile: path.resolve(process.env.AI_FACTORY_CONFIG || path.join(root, 'router_config.json')),
+      cwd: payloadCwd(payload),
+      routerCommand
+    });
+  })().catch(() => '');
+  const deadline = new Promise(resolve => setTimeout(() => resolve(''), MEMORY_DEADLINE_MS).unref());
+  return Promise.race([work, deadline]);
+}
+
 let input = '';
 process.stdin.setEncoding('utf8');
 process.stdin.on('error', () => {});
@@ -88,7 +115,7 @@ process.stdin.on('data', chunk => {
   input += chunk;
   if (input.length > 262144) { console.log(JSON.stringify({ decision: 'allow' })); process.exit(0); }
 });
-process.stdin.on('end', () => {
+process.stdin.on('end', async () => {
   try {
     const payload = input.trim() ? JSON.parse(input) : {};
     if (Number(process.env.AI_FACTORY_ROUTER_DEPTH || 0) > 0) {
@@ -126,7 +153,9 @@ process.stdin.on('end', () => {
       return;
     }
     const rule = fs.readFileSync(path.join(pluginRoot, 'rules', 'ai_factory_router.md'), 'utf8').replaceAll('{{ROUTER_COMMAND}}', command);
-    console.log(JSON.stringify({ injectSteps: [{ systemMessage: { systemMessage: rule } }] }));
+    let notice = '';
+    try { notice = await memoryNotice(installation, payload, command); } catch {}
+    console.log(JSON.stringify({ injectSteps: [{ systemMessage: { systemMessage: notice ? rule + '\n\n' + notice : rule } }] }));
   } catch {
     // A malformed payload or unavailable file must never block the host session.
     console.log(JSON.stringify({ decision: 'allow' }));
