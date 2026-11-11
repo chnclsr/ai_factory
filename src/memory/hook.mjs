@@ -6,6 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { resolveProject } from './project.mjs';
+import { followMoves } from './projects.mjs';
 import { snapshotProject, parseFrontMatter } from './store.mjs';
 import { neutralizeForInjection } from './sanitize.mjs';
 
@@ -25,7 +26,7 @@ export function handoffNotice({ dataDir, configFile, cwd, routerCommand }) {
   if (!memoryEnabled(configFile)) return '';
   const repoDir = path.join(dataDir, 'memory.git');
   if (!fs.existsSync(path.join(repoDir, 'HEAD'))) return '';
-  const project = resolveProject({ cwd });
+  const project = followMoves(repoDir, resolveProject({ cwd }));
   const snapshot = snapshotProject(repoDir, project.key);
   const open = snapshot.list('handoffs').filter(e => e.name.endsWith('.md'))
     .map(e => ({ id: e.name.slice(0, -3), ...parseFrontMatter(snapshot.read(`handoffs/${e.name}`) || '') }))

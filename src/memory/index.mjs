@@ -5,6 +5,7 @@
 // that lets the task continue unchanged.
 
 import { resolveProject, UNSCOPED_PROJECT } from './project.mjs';
+import { followMoves } from './projects.mjs';
 import { takeSnapshot, diffSnapshots } from './worktree.mjs';
 import { newSessionId, isValidSid, recordTurnCommit, findSession, readMeta } from './session.mjs';
 import { snapshotProject } from './store.mjs';
@@ -44,7 +45,8 @@ export function createMemory({ repoDir, dataDir, indexFile = null, memoryConfig 
         try { migrateRegistry(repoDir, opts.legacyRegistryFile, warn); } catch (err) { warn(`registry migration failed: ${err.message}`); }
       }
       let cwd = opts.cwd || process.cwd();
-      let project = resolveProject({ project: opts.project, cwd });
+      // A renamed or merged project resolves to where it lives now.
+      let project = followMoves(repoDir, resolveProject({ project: opts.project, cwd }));
       const scope = SCOPES.includes(opts.scope) ? opts.scope : 'repo';
       if (opts.scope && opts.scope !== scope) warn(`unknown scope "${opts.scope}", using repo`);
       let sid = opts.session || env.AI_FACTORY_SESSION_ID || '';
@@ -109,6 +111,8 @@ export function createMemory({ repoDir, dataDir, indexFile = null, memoryConfig 
   function recordTurn(ctx, outcome) {
     if (!ctx || ctx.missing) return null;
     return guard('recordTurn', null, () => {
+      // A rename or merge that landed while the engine ran moves this turn along with the project.
+      if (ctx.project.key !== UNSCOPED_PROJECT) ctx.project = followMoves(repoDir, ctx.project);
       const after = takeSnapshot(ctx.cwd, { ignorePaths: ctx.project.ignorePaths, budgetMs: settings.file_budget_ms, enabled: settings.track_files });
       const diff = diffSnapshots(ctx.before, after, { budgetMs: settings.file_budget_ms });
       if (diff.files === 'unavailable') warn(`file changes not recorded: ${diff.reason}`);

@@ -9,6 +9,10 @@
 //   memory handoff list [--all]
 //   memory handoff accept <hid>                 take an open handoff (exactly one taker wins)
 //   memory note add <text> [--scope repo|mine]  store a note page (mine = personal ref)
+//   memory project list                         projects with their head Seq, sessions and aliases
+//   memory project rename <old> <new> [--yes]   the old key keeps resolving to the new one
+//   memory project merge <source> <target> [--yes]
+//                                               lossless merge; source then resolves to target
 //   memory search <query> [--scope repo|dir|mine] [--global]
 //                                               --global: every project, never the personal ref
 
@@ -19,6 +23,7 @@ import { findSession, listSessions, readTurns, readMeta, sessionPaths, ALIASES_F
 import { searchWithInfo, SCOPES } from './search.mjs';
 import { beginHandoff, claimHandoff, listHandoffs, isValidHandoffId } from './handoff.mjs';
 import { revertPatch } from './worktree.mjs';
+import { followMoves, describeProjects, renameProject, mergeProjects } from './projects.mjs';
 import { sanitizeValue } from './sanitize.mjs';
 
 function parseArgs(argv) {
@@ -63,8 +68,39 @@ export async function runMemoryCli(argv, { repoDir, indexFile = null, configFile
   const { positional, flags } = parseArgs(argv);
   const [group, action, arg] = positional;
   const workdir = flags.cwd || cwd;
-  const project = resolveProject({ project: flags.project, cwd: workdir });
+  const project = followMoves(repoDir, resolveProject({ project: flags.project, cwd: workdir }));
   const snapshot = snapshotProject(repoDir, project.key);
+
+  if (group === 'project') {
+    if (action === 'list') {
+      const projects = describeProjects(repoDir);
+      for (const p of projects) {
+        io.out(p.movedTo ? `${p.key} -> ${p.movedTo}\n` : `${p.key} seq ${p.seq}, ${p.sessions} session(s)${p.aliases.length ? `, aliases: ${p.aliases.join(', ')}` : ''}${p.key === project.key ? '  (current)' : ''}\n`);
+      }
+      if (!projects.length) io.out('(no projects)\n');
+      return 0;
+    }
+    if (action === 'rename' || action === 'merge') {
+      const [first, second] = positional.slice(2);
+      if (!first || !second) { io.err(`Usage: memory project ${action} <${action === 'rename' ? 'old> <new' : 'source> <target'}>\n`); return 1; }
+      const question = action === 'rename'
+        ? `Rename project ${first} to ${second}? The old key will keep resolving to the new one.`
+        : `Merge project ${first} into ${second}? Afterwards ${first} resolves to ${second}.`;
+      if (!flags.yes && !askYesNo(question, io)) { io.err(`Not changed. Re-run with --yes to confirm.\n`); return 2; }
+      try {
+        if (action === 'rename') {
+          renameProject(repoDir, first, second);
+          io.out(`Renamed ${first} to ${second}.\n`);
+        } else {
+          const report = mergeProjects(repoDir, first, second);
+          io.out(`Merged ${first} into ${second}: ${report.added} file(s) added, ${report.conflicts.length} kept side by side.\n`);
+          for (const c of report.conflicts) io.out(`  ${c.path}: ${second}'s copy kept, ${first}'s copy at ${c.sourceCopy}\n`);
+          for (const [alias, renamed] of Object.entries(report.aliasRenames)) io.out(`  alias ${alias} from ${first} is now ${renamed}\n`);
+        }
+      } catch (err) { io.err(`${err.message}\n`); return 1; }
+      return 0;
+    }
+  }
 
   if (group === 'session' && action === 'show') {
     const sid = pickSession(snapshot, arg || flags.session);
@@ -203,6 +239,7 @@ export async function runMemoryCli(argv, { repoDir, indexFile = null, configFile
 
   io.err('Usage: node router.mjs memory session show [<alias|sid>] | session adopt <alias> | turn diff <n> | turn revert <n> [--yes]\n' +
     '       | note add <text> [--scope repo|mine] | search <query> [--scope repo|dir|mine] [--global]\n' +
+    '       | project list | project rename <old> <new> [--yes] | project merge <source> <target> [--yes]\n' +
     '       | handoff begin --to <engine|any> [--task <text>] | handoff list [--all] | handoff accept <hid>\n');
   return 1;
 }

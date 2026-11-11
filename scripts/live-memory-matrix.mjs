@@ -6,8 +6,13 @@
 //   2. recall: a different session in the same project asks for it; the reply must contain
 //              "<word>-OK" (the suffix is never written anywhere, so a CLI echoing its prompt
 //              cannot pass by accident)
-// Once per engine:
+// Once per engine (with the model that passed, preferring the cheapest Claude model):
 //   3. isolation: the same question from another project must not mention the word
+//   4. handoff:   a manual handoff addressed to the engine is shown to a new session in the same
+//                 project; the reply must carry the handoff's token and the handoff must end up
+//                 accepted (taken exactly once)
+// Once per ordered pair of engines (--pairs, on by default; --no-pairs skips it):
+//   5. pair:      engine A is told the word, engine B recalls it in another session
 //
 // Memory and router state live in a temporary data dir; nothing touches .runtime/memory.git.
 // Results go to .runtime/memory-matrix.json. A model whose CLI is missing or out of quota is
@@ -62,7 +67,9 @@ function runRouter(args) {
 
 function classify(result) {
   const text = (result.out + '\n' + result.err).toLowerCase();
-  if (/is not recognized|command not found|enoent/.test(text)) return 'skip: CLI missing';
+  // The last pattern is Windows' "The system cannot find the path specified", seen when an npm shim
+  // points at a CLI folder that no longer exists.
+  if (/is not recognized|command not found|enoent|cannot find the path specified|belirtilen yolu bulam/.test(text)) return 'skip: CLI missing';
   if (/429|rate limit|quota|usage limit|insufficient|credit/.test(text)) return 'skip: quota or rate limit';
   if (/unauthorized|not logged in|login required|authenticate/.test(text)) return 'skip: not signed in';
   return null;
@@ -119,6 +126,47 @@ async function isolation(engine, rows) {
     detail: leaked || result.code !== 0 ? tail(result) : undefined };
 }
 
+// One model per engine for the pair and handoff checks.
+function representative(engine, rows) {
+  const passed = rows.filter(r => r.engine === engine && r.result === 'pass');
+  return passed.find(r => /haiku/.test(r.model)) || passed[0] || null;
+}
+
+async function pair(a, b) {
+  const word = `HERON${crypto.randomInt(1000, 9999)}`;
+  const dir = project(`live-pair-${a.engine}-${b.engine}`);
+  const tell = await runRouter([...modelFlags(a), '--no-fallback', '--cwd', dir, '--session', 'tell', '--task',
+    `Remember this project code word for a later session: ${word}. Reply with exactly one word: noted`]);
+  const row = { from: `${a.engine}/${a.model}`, to: `${b.engine}/${b.model}`, word };
+  if (tell.code !== 0) return { ...row, result: classify(tell) || 'fail: tell call failed', detail: tail(tell) };
+  const recall = await runRouter([...modelFlags(b), '--no-fallback', '--cwd', dir, '--session', 'recall', '--task', ASK]);
+  if (recall.code !== 0) return { ...row, result: classify(recall) || 'fail: recall call failed', detail: tail(recall) };
+  const ok = recall.out.includes(`${word}-OK`);
+  return { ...row, result: ok ? 'pass' : 'fail: word not recalled', detail: ok ? undefined : tail(recall) };
+}
+
+async function handoff(target) {
+  const token = `EGRET${crypto.randomInt(1000, 9999)}`;
+  const dir = project(`live-handoff-${target.engine}`);
+  const begin = await runRouter(['memory', 'handoff', 'begin', '--to', target.engine, '--cwd', dir, '--task',
+    `Reply with the single word ${token}-DONE and nothing else.`]);
+  const hid = (begin.out.match(/handoff: (\S+)/) || [])[1];
+  const row = { engine: target.engine, model: target.model, token, handoff: hid };
+  if (begin.code !== 0 || !hid) return { ...row, result: 'fail: handoff begin failed', detail: tail(begin) };
+  const take = await runRouter([...modelFlags(target), '--no-fallback', '--cwd', dir, '--session', 'taker', '--task',
+    'Your memory block lists an open handoff for you. Do not search files or run tools. Do exactly what that handoff task asks.']);
+  if (take.code !== 0) return { ...row, result: classify(take) || 'fail: taking call failed', detail: tail(take) };
+  const list = await runRouter(['memory', 'handoff', 'list', '--all', '--cwd', dir]);
+  const accepted = new RegExp(`^${hid} accepted`, 'm').test(list.out);
+  const answered = take.out.includes(`${token}-DONE`);
+  row.accepted = accepted;
+  row.answered = answered;
+  // Acceptance is the memory layer's job; the reply shows the engine actually received the task.
+  row.result = accepted && answered ? 'pass' : !accepted ? 'fail: handoff not accepted' : 'fail: handoff task not carried out';
+  if (row.result !== 'pass') row.detail = tail(take);
+  return row;
+}
+
 const startedAt = new Date().toISOString();
 const rows = [];
 // Engines run in parallel; models of one engine run one after another to stay under rate limits.
@@ -136,9 +184,31 @@ await Promise.all(ENGINES.filter(e => targets.some(t => t.engine === e)).map(asy
   console.log(`isolation ${engine}: ${row.result}`);
 }));
 
-const report = { startedAt, finishedAt: new Date().toISOString(), workDir: work, canary: rows, isolation: isolationRows };
+const engines = ENGINES.filter(e => representative(e, rows));
+const handoffRows = [];
+await Promise.all(engines.map(async engine => {
+  const row = await handoff(representative(engine, rows));
+  handoffRows.push(row);
+  console.log(`handoff ${engine}: ${row.result}${row.detail ? '  — ' + row.detail.slice(0, 200) : ''}`);
+}));
+const pairRows = [];
+if (!process.argv.includes('--no-pairs')) {
+  // Round k pairs engine i with engine i+k, so per round each engine tells once and recalls once.
+  for (let k = 1; k < engines.length; k++) {
+    await Promise.all(engines.map(async (a, i) => {
+      const row = await pair(representative(a, rows), representative(engines[(i + k) % engines.length], rows));
+      pairRows.push(row);
+      console.log(`pair ${row.from} -> ${row.to}: ${row.result}${row.detail ? '  — ' + row.detail.slice(0, 200) : ''}`);
+    }));
+  }
+}
+
+const report = { startedAt, finishedAt: new Date().toISOString(), workDir: work, canary: rows, isolation: isolationRows,
+  handoff: handoffRows, pairs: pairRows };
 fs.mkdirSync(path.dirname(OUT), { recursive: true });
 fs.writeFileSync(OUT, JSON.stringify(report, null, 2));
-const failed = [...rows, ...isolationRows].filter(r => r.result.startsWith('fail'));
-console.log(`\n${rows.filter(r => r.result === 'pass').length}/${rows.length} models recalled; ${failed.length} failure(s). Report: ${OUT}`);
+const failed = [...rows, ...isolationRows, ...handoffRows, ...pairRows].filter(r => r.result.startsWith('fail'));
+console.log(`\n${rows.filter(r => r.result === 'pass').length}/${rows.length} models recalled; ` +
+  `${handoffRows.filter(r => r.result === 'pass').length}/${handoffRows.length} handoffs; ` +
+  `${pairRows.filter(r => r.result === 'pass').length}/${pairRows.length} engine pairs; ${failed.length} failure(s). Report: ${OUT}`);
 process.exit(failed.length ? 1 : 0);

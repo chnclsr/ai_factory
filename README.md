@@ -277,6 +277,14 @@ Before each attempt the engine's task file starts with a `<retrieved-memory untr
 | `recent_turns_verbatim` | `3` | Newest unseen turns shown with task and reply; older ones get one line |
 | `index` | `true` | Use the SQLite full-text index for search and related items; `false` scans the git repository instead |
 
+Projects can be listed, renamed and merged. A renamed or merged-away project keeps its full history, and its old key (from a `.ai-factory.toml`, a remote or `--project`) keeps resolving to the new one. A merge keeps everything: when both projects have a note with the same name, the target's stays and the source's is saved as `<name>.from-<source>`, and a clashing session alias from the source becomes `<alias>@<source>`. Both commands ask for confirmation, or take `--yes`.
+
+```bash
+node router.mjs memory project list
+node router.mjs memory project rename <old-key> <new-key> --yes
+node router.mjs memory project merge <source-key> <target-key> --yes
+```
+
 Handoffs: when a call ends in a Gemini handoff, or every engine fails, memory writes an open handoff and the report gains a `handoff: <id>` line. The plugin hook shows open handoffs for the current project to Antigravity, inside the same untrusted block, together with the command that takes one. A router engine sees open handoffs addressed to it (or to `any`) in its block, and a successful call takes them. Taking a handoff succeeds exactly once, however many agents try at the same time.
 
 ```bash

@@ -7,6 +7,7 @@
 
 import fs from 'node:fs';
 import { resolveProject, UNSCOPED_PROJECT, slugify } from './project.mjs';
+import { followMoves } from './projects.mjs';
 import { commitProject } from './store.mjs';
 import { ALIASES_FILE, sessionPaths, isValidSid } from './session.mjs';
 import { renameWithRetry } from './gitobj.mjs';
@@ -26,7 +27,7 @@ export function migrateRegistry(repoDir, registryFile, warn = () => {}) {
   const byProject = new Map();
   for (const [name, entry] of Object.entries(data?.sessions || {})) {
     if (!entry || typeof entry !== 'object' || ['__proto__', 'constructor', 'prototype'].includes(name)) continue;
-    const project = entry.cwd ? resolveProject({ cwd: entry.cwd }) : { key: UNSCOPED_PROJECT, name: UNSCOPED_PROJECT, source: 'migration' };
+    const project = entry.cwd ? followMoves(repoDir, resolveProject({ cwd: entry.cwd })) : { key: UNSCOPED_PROJECT, name: UNSCOPED_PROJECT, source: 'migration' };
     if (!entry.cwd) {
       warn(`legacy session "${name}" had no cwd and was filed under project ${UNSCOPED_PROJECT}. ` +
         `To move it: node router.mjs memory session adopt "${name}" --cwd <project directory>`);
