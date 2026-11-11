@@ -32,7 +32,7 @@ function parseArgs(argv) {
   const flags = {};
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg === '--yes' || arg === '-y' || arg === '--global') flags[arg.replace(/^-+/, '')] = true;
+    if (arg === '--yes' || arg === '-y' || arg === '--global' || arg === '--all') flags[arg.replace(/^-+/, '')] = true;
     else if (arg.startsWith('--')) flags[arg.slice(2)] = argv[++i] ?? '';
     else positional.push(arg);
   }

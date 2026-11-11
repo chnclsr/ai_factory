@@ -151,3 +151,14 @@ test('router calls follow a renamed project: --resume finds the session and new 
   assert.deepEqual(snapshotProject(h.repo, 'before').list('').map(e => e.name), ['project.json']);
   assert.equal(fsck(h.repo).status, 0);
 });
+
+test('boolean flags never swallow the next argument: handoff list --all --cwd <dir> reads that project', async t => {
+  const dir = tempDir(t, 'mem-proj-');
+  const repo = path.join(dir, 'memory.git');
+  const cwd = project(dir, 'flags');
+  let r = await cli(repo, ['handoff', 'begin', '--to', 'claude', '--task', 'port the exporter', '--cwd', cwd]);
+  assert.equal(r.code, 0, r.err);
+  const hid = r.out.match(/handoff: (\S+)/)[1];
+  r = await cli(repo, ['handoff', 'list', '--all', '--cwd', cwd]);
+  assert.match(r.out, new RegExp(`^${hid} open to=claude`, 'm'));
+});
