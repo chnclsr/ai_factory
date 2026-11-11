@@ -14,6 +14,18 @@ import { tempDir } from './test-helpers.mjs';
 export const ROOT = path.resolve(import.meta.dirname, '..', '..');
 export const ROUTER = path.join(ROOT, 'router.mjs');
 
+// Model ids as the fake CLIs see them, read from router_config.json so tests follow the chain
+// order and the vibe default model instead of hard-coding them.
+export function configuredModels() {
+  const config = JSON.parse(fs.readFileSync(path.join(ROOT, 'router_config.json'), 'utf8'));
+  const idOf = (engine, name) => config.engines[engine].models[name].id;
+  return {
+    chain: config.fallback_chain.map(entry => idOf(entry.engine, entry.model)),
+    vibeDefault: idOf('vibe', config.engines.vibe.default_model),
+    vibeComplex: idOf('vibe', config.engines.vibe.complex_model)
+  };
+}
+
 export const FAKE_SESSION_IDS = {
   opencode: 'ses_Fake1',
   claude: '11111111-1111-4111-8111-111111111111',

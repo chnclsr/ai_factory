@@ -128,3 +128,14 @@ test('A13: --scope dir sees only its subdirectory; mine stays out of project sea
   assert.match(h.run(['memory', 'search', 'beta', '--cwd', sub]).stdout, /\(no matches\)/);
   assert.match(h.run(['memory', 'search', 'beta', '--scope', 'dir', '--cwd', sub]).stdout, /\(no matches\)/);
 });
+
+test('plain-text replies drop the CLI\'s own status lines, JSON replies are unaffected', async () => {
+  const { extractResponseText } = await import('./session.mjs');
+  const muse = 'muse: workspace root: C:\work (explicit)\nmuse: Agent delegation: auto unavailable: workspace is untrusted.\nHERON1144-OK';
+  assert.equal(extractResponseText(muse, 'muse'), 'HERON1144-OK');
+  assert.equal(extractResponseText(muse, 'MUSE'), 'HERON1144-OK');
+  assert.equal(extractResponseText(muse), muse, 'without an engine nothing is dropped');
+  assert.equal(extractResponseText('vibe: said hi\nnoted', 'muse'), 'vibe: said hi\nnoted', 'only the engine\'s own prefix');
+  const json = '{"type":"result","result":"muse: keep this"}';
+  assert.equal(extractResponseText(json, 'muse'), 'muse: keep this');
+});

@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
+import { configuredModels } from './memory/router-harness.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
 const router = path.join(root, 'router.mjs');
@@ -162,24 +163,25 @@ syncBuiltinESMExports();
       { cwd: root, env: { ...env, AI_FACTORY_FAIL: fail }, encoding: 'utf8', timeout: 30000 });
   };
 
+  // Chain order and the vibe default model come from router_config.json.
+  const { chain, vibeDefault, vibeComplex } = configuredModels();
   let result = run('', '--task', 'Fix the failing test');
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.deepEqual(calls().map(c => c.model), ['zai-glm-5-3-flash']);
+  assert.deepEqual(calls().map(c => c.model), [vibeDefault]);
 
   result = run('', '--task', 'Review this architecture and refactor it');
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.deepEqual(calls().map(c => c.model), ['glm-5-3']);
+  assert.deepEqual(calls().map(c => c.model), [vibeComplex]);
 
   result = run('', '--task', 'Use vibe for this');
-  assert.deepEqual(calls().map(c => c.model), ['zai-glm-5-3-flash']);
+  assert.deepEqual(calls().map(c => c.model), [vibeDefault]);
 
-  result = run('zai-glm-5-3-flash,glm-5-3,opencode/deepseek-v4.1-flash-free,opencode/mimo-v2.6-flash-free,opencode/glm-5.3-flash-free', '--task', 'Fix it');
+  result = run(chain.slice(0, -1).join(','), '--task', 'Fix it');
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.deepEqual(calls().map(c => c.model), ['zai-glm-5-3-flash', 'glm-5-3', 'opencode/deepseek-v4.1-flash-free',
-    'opencode/mimo-v2.6-flash-free', 'opencode/glm-5.3-flash-free', 'muse-spark-1.3-contributor']);
+  assert.deepEqual(calls().map(c => c.model), chain);
   assert.match(result.stdout, /succeed_with: muse-spark-1\.3-contributor/);
 
-  result = run('zai-glm-5-3-flash,glm-5-3,opencode/deepseek-v4.1-flash-free,opencode/mimo-v2.6-flash-free,opencode/glm-5.3-flash-free,muse-spark-1.3-contributor', '--task', 'Fix it');
+  result = run(chain.join(','), '--task', 'Fix it');
   assert.equal(result.status, 0, result.stdout + result.stderr);
   // Codex is out of the chain: after Muse the task goes back to Gemini.
   assert.equal(calls().at(-1).model, 'muse-spark-1.3-contributor');
@@ -192,7 +194,7 @@ syncBuiltinESMExports();
 
   result = run('gpt-5.6-terra', '--task', 'terra ile incele');
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.deepEqual(calls().map(c => c.model).slice(0, 2), ['gpt-5.6-terra', 'zai-glm-5-3-flash']);
+  assert.deepEqual(calls().map(c => c.model).slice(0, 2), ['gpt-5.6-terra', chain[0]]);
 
   result = run('', '--model', 'nemotron', '--task', 'any');
   assert.deepEqual(calls().map(c => c.model), ['opencode/nemotron-3.5-super-vl-free']);
@@ -202,7 +204,7 @@ syncBuiltinESMExports();
   assert.match(result.stdout, /handoff_to_gemini/);
 
   result = run('', '--task', 'Solve the metadata issue');
-  assert.deepEqual(calls().map(c => c.model), ['zai-glm-5-3-flash']);
+  assert.deepEqual(calls().map(c => c.model), [vibeDefault]);
 
   for (const model of ['gpt-6.1-sol', 'gpt-6-astra', 'sol']) {
     assert.notEqual(run('', '--engine', 'codex', '--model', model, '--task', 'blocked').status, 0);

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { makeHarness, memoryBlock, FAKE_SESSION_IDS } from './router-harness.mjs';
+import { makeHarness, memoryBlock, FAKE_SESSION_IDS, configuredModels } from './router-harness.mjs';
 import { initFixtureRepo, commitAll } from './test-helpers.mjs';
 import { estimateTokens, buildPrompt, budgetFor } from './pack.mjs';
 import { snapshotProject } from './store.mjs';
@@ -85,14 +85,15 @@ test('A2 + A5: a resumed engine session gets only the delta, and nothing when no
 test('A3: after a failure the next engine in the chain gets the earlier error in L0', t => {
   const h = makeHarness(t);
   const cwd = workDir(h, 'fallback');
-  const result = h.run(['--cwd', cwd, '--task', 'Fix the failing integration test in the api'], { actions: { fail: ['zai-glm-5-3-flash'] } });
+  const { chain } = configuredModels();
+  const result = h.run(['--cwd', cwd, '--task', 'Fix the failing integration test in the api'], { actions: { fail: [chain[0]] } });
   assert.equal(result.status, 0, result.stdout + result.stderr);
   const [first, second] = h.calls();
-  assert.equal(first.model, 'zai-glm-5-3-flash');
+  assert.equal(first.model, chain[0]);
   assert.equal(memoryBlock(first.prompt), null);
-  assert.equal(second.model, 'glm-5-3');
+  assert.equal(second.model, chain[1]);
   const block = memoryBlock(second.prompt);
-  assert.match(block, /earlier attempt in this call failed: vibe-zai-glm-5-3-flash \(Rate-limit/);
+  assert.ok(block.includes(`earlier attempt in this call failed: vibe-${chain[0]} (Rate-limit`), block);
 });
 
 test('A7: switching models in one session hands over the chat turns and per-turn file changes', t => {

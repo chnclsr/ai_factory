@@ -72,8 +72,10 @@ export function listSessions(snapshot) {
 }
 
 // Pulls the model's reply out of an engine's captured output tail. JSON engines emit one event per
-// line; the others print plain text.
-export function extractResponseText(output) {
+// line; the others print plain text. The router's tail mixes stdout and stderr, so for plain-text
+// engines the CLI's own status lines (Muse prints "muse: workspace root: ...") are dropped: they
+// are not the reply, and kept they filled the recorded reply and the block with noise.
+export function extractResponseText(output, engine = '') {
   const text = String(output || '');
   const pieces = [];
   let sawJson = false;
@@ -89,7 +91,10 @@ export function extractResponseText(output) {
       pieces.push(event.content.filter(p => p.type === 'text').map(p => p.text).join(''));
     }
   }
-  return (sawJson ? pieces.join('\n') : text).trim();
+  if (sawJson) return pieces.join('\n').trim();
+  const prefix = engine ? `${String(engine).toLowerCase()}: ` : null;
+  const lines = text.split('\n');
+  return (prefix ? lines.filter(line => !line.toLowerCase().startsWith(prefix)) : lines).join('\n').trim();
 }
 
 const ENGINE_SESSION_FORMAT = {
@@ -111,7 +116,7 @@ export function engineSessionKey(engine, id) {
 export function recordTurnCommit(repoDir, ctx, outcome, extra = {}) {
   const { sid, project } = ctx;
   const paths = sessionPaths(sid);
-  const response = sanitizeText(extractResponseText(outcome.output), { maxBytes: RESPONSE_MAX_BYTES });
+  const response = sanitizeText(extractResponseText(outcome.output, outcome.engine), { maxBytes: RESPONSE_MAX_BYTES });
   const responseHead = sanitizeText(response, { maxBytes: RESPONSE_HEAD_BYTES });
   const engineSession = plausibleEngineSession(outcome.engine, outcome.engineSessionId) ? outcome.engineSessionId : null;
   const diff = extra.diff || { files: [], patch: null };

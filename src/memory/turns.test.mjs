@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { makeHarness, ROOT } from './router-harness.mjs';
+import { makeHarness, ROOT, configuredModels } from './router-harness.mjs';
 import { git, initFixtureRepo, commitAll, fsck, tempDir } from './test-helpers.mjs';
 import { snapshotProject } from './store.mjs';
 import { listSessions, readTurns } from './session.mjs';
@@ -102,7 +102,8 @@ test('A4: one router call writes exactly one commit with the expected trailers',
   const key = resolveProject({ cwd }).key;
   const before = readRef(h.repo, `refs/heads/p/${key}`);
   assert.equal(before, null);
-  const result = h.run(['--cwd', cwd, '--session', 'trailer-check', '--task', 'Fix the failing test please'], { actions: { fail: ['zai-glm-5-3-flash'] } });
+  const { chain } = configuredModels();
+  const result = h.run(['--cwd', cwd, '--session', 'trailer-check', '--task', 'Fix the failing test please'], { actions: { fail: [chain[0]] } });
   assert.equal(result.status, 0, result.stdout + result.stderr);
   const sha = readRef(h.repo, `refs/heads/p/${key}`);
   const commit = readCommit(h.repo, sha);
@@ -111,8 +112,8 @@ test('A4: one router call writes exactly one commit with the expected trailers',
   assert.deepEqual({ Session: commit.trailers.Session, Engine: commit.trailers.Engine, Kind: commit.trailers.Kind },
     { Session: 'trailer-check', Engine: 'vibe', Kind: 'turn' });
   const { turns } = sessionTurns(h, cwd);
-  assert.equal(turns[0].model, 'glm-5-3');
-  assert.match(turns[0].attempts[0], /zai-glm-5-3-flash/);
+  assert.equal(turns[0].model, chain[1]);
+  assert.ok(turns[0].attempts[0].includes(chain[0]), turns[0].attempts[0]);
 });
 
 test('a broken memory store never blocks the task', t => {
@@ -158,7 +159,7 @@ test('memory.enabled=false: output, commands and prompts match the pre-memory ro
   fs.mkdirSync(work);
   const scenarios = [
     [['--task', 'Fix the failing test in this repository'], {}],
-    [['--task', 'Fix it'], { fail: ['zai-glm-5-3-flash', 'glm-5-3', 'opencode/deepseek-v4.1-flash-free'] }],
+    [['--task', 'Fix it'], { fail: configuredModels().chain.slice(0, 3) }],
     [['--engine', 'claude', '--model', 'haiku-5.5', '--name', 'named', '--task', 'first named turn'], {}],
     [['--resume', 'named', '--task', 'second named turn'], {}],
     [['--engine', 'codex', '--task', 'codex task with enough words'], {}],
