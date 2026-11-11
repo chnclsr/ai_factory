@@ -19,7 +19,7 @@ import { fileURLToPath } from 'url';
 import { spawn, execSync } from 'child_process';
 import crypto from 'crypto';
 import { fetchAllQuotas, formatQuotaTable, checkEngineQuotaGate } from './quota_tracker.mjs';
-import { ROOT, CONFIG_FILE, stateFile } from '../lib/paths.mjs';
+import { ROOT, CONFIG_FILE, DATA_DIR, MEMORY_REPO, stateFile } from '../lib/paths.mjs';
 import { decideWatchdogAction, sampleTreeCpuMs } from './watchdog.mjs';
 
 const __dirname = ROOT;
@@ -474,6 +474,9 @@ function parseCliArgs() {
     quota: false,
     noFallback: false,
     reasoningEffort: '',
+    session: '',
+    project: '',
+    scope: '',
     cwd: process.cwd()
   };
 
@@ -497,6 +500,12 @@ function parseCliArgs() {
       options.reasoningEffort = (args[++i] || '').toLowerCase().trim();
     } else if (arg === '--cwd') {
       options.cwd = args[++i] || process.cwd();
+    } else if (arg === '--session') {
+      options.session = (args[++i] || '').trim();
+    } else if (arg === '--project') {
+      options.project = (args[++i] || '').trim();
+    } else if (arg === '--scope') {
+      options.scope = (args[++i] || '').toLowerCase().trim();
     } else if (!options.task && !arg.startsWith('-')) {
       options.task = arg;
     }
@@ -763,6 +772,19 @@ function extractSessionId(output) {
   return match ? match[1] : null;
 }
 
+// Memory layer (docs/memory-plan.md). Loaded only when enabled, so a disabled config runs exactly
+// the code path it always did; a load failure is logged and the task continues without memory.
+async function loadMemory(config) {
+  if (config?.memory?.enabled !== true) return null;
+  try {
+    const { createMemory } = await import('./memory/index.mjs');
+    return createMemory({ repoDir: MEMORY_REPO, dataDir: DATA_DIR, memoryConfig: config.memory, routerConfig: config });
+  } catch (err) {
+    console.warn('[AI Factory Memory] disabled for this call: ' + (err?.message || err));
+    return null;
+  }
+}
+
 // \u2500\u2500 Main Entrypoint \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
 async function main() {
@@ -777,6 +799,11 @@ async function main() {
     console.log('succeed_with: handoff_to_gemini');
     console.log('='.repeat(60) + '\n');
     process.exit(0);
+  }
+
+  if (process.argv[2] === 'memory') {
+    const { runMemoryCli } = await import('./memory/cli.mjs');
+    process.exit(await runMemoryCli(process.argv.slice(3), { repoDir: MEMORY_REPO }));
   }
 
   const options = parseCliArgs();
@@ -807,6 +834,9 @@ Kullan\u0131m:
     `);
     process.exit(0);
   }
+
+  const memory = await loadMemory(config);
+  const memoryCtx = memory ? memory.resolveSession({ cwd: options.cwd, session: options.session, project: options.project, scope: options.scope }) : null;
 
   let targetEngine = options.engine;
   let targetModel = options.model;
@@ -913,7 +943,8 @@ Kullan\u0131m:
     }
     let classified;
     try {
-      const res = await executors[engine](options.task, model, options.cwd, attempt.sessionId, config);
+      const prompt = memory ? memory.buildPrompt(options.task, { ctx: memoryCtx, engine, model, engineSessionId: attempt.sessionId, attemptIndex: index, errors }) : options.task;
+      const res = await executors[engine](prompt, model, options.cwd, attempt.sessionId, config);
       lastOutput = res.output;
       if (res.sessionId) lastSessionId = res.sessionId;
       const jsonEngine = JSON_ENGINES.includes(engine);
@@ -968,6 +999,15 @@ Kullan\u0131m:
       saveJson(REGISTRY_FILE, registry);
       console.log(`[AI Factory Registry] Oturum '${sessionName}' ad\u0131yla kaydedildi (${extractedId ? 'ID: ' + extractedId : 'yeni'}).`);
     }
+  }
+
+  if (memory) {
+    memory.recordTurn(memoryCtx, {
+      task: options.task, engine: targetEngine, model: targetModel,
+      ok: Boolean(succeedWith) && succeedWith !== 'handoff_to_gemini', succeedWith,
+      engineSessionId: lastSessionId || extractSessionId(lastOutput) || resumeSessionId,
+      output: lastOutput, attempts: errors
+    });
   }
 
   // Standart Rapor \u00c7\u0131kt\u0131s\u0131 (Path zinciri ile)

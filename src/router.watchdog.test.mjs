@@ -17,6 +17,8 @@ function runFixture(t, mode, watchdog) {
   const config = JSON.parse(fs.readFileSync(path.join(root, 'router_config.json')));
   config.watchdog = { initial_timeout_ms: 50, idle_timeout_ms: 50,
     cpu_still_limit_ms: 100, max_execution_time_ms: 1500, check_interval_ms: 25, ...watchdog };
+  // These tests time the engine phase inside a 5 s process limit; memory snapshots would add git work around it.
+  config.memory = { ...config.memory, enabled: false };
   fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify(config));
   fs.writeFileSync(path.join(dir, 'mock.mjs'), `
 const mode = process.env.WATCHDOG_TEST_MODE;

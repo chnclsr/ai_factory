@@ -235,6 +235,24 @@ succeed_with: opencode-opencode/deepseek-v4.1-flash-free
 ```
 `path` covers one invocation only. If you called the router twice, the second report will not include engines tried by the first call. A failed or quarantined engine is included only when that same call attempted it.
 
+### Memory
+
+With `memory.enabled` set to `true` in `router_config.json` (the default), every router call is recorded as one turn in a git repository at `.runtime/memory.git` (or `$AI_FACTORY_DATA_DIR/memory.git`). The repository is separate from your project, and each project has its own branch `refs/heads/p/<project>`. A turn holds the task, the start of the reply, the engine and model, the attempts that failed, and the files the call changed (with `+/-` line counts and a patch). Changes you made before the call are not counted. Set `memory.enabled` to `false` and the router behaves exactly as it did before memory existed.
+
+```bash
+node router.mjs memory session show [<alias|session id>] --cwd <project>
+node router.mjs memory turn diff 2 --session <alias|session id> --cwd <project>
+node router.mjs memory turn revert 2 --session <alias|session id> --cwd <project> --yes
+```
+
+`turn revert` lists the files first and asks for confirmation; without a terminal it needs `--yes`. Secrets (`sk-…`, `ghp_…`, Telegram bot tokens, `Bearer` values, `.env` style `*_KEY=` assignments) are masked before anything is written. Design and status: [docs/memory-plan.md](docs/memory-plan.md).
+
+| Key (`memory.*`) | Default | Purpose |
+|---|---|---|
+| `enabled` | `true` | Turns the whole layer on or off |
+| `track_files` | `true` | Snapshot the project before and after each call to record that call's file changes |
+| `file_budget_ms` | `2000` | Time limit for each snapshot or diff; past it the turn is still recorded with `files: "unavailable"` |
+
 ### Live Quota Status Check
 ```bash
 node router.mjs --quota

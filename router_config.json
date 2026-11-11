@@ -41,7 +41,8 @@
             "deepseek",
             "deepseek v4.1",
             "deepseek-v4.1"
-          ]
+          ],
+          "memory_budget_tokens": 800
         },
         "mimo-v2.6-flash-free": {
           "id": "opencode/mimo-v2.6-flash-free",
@@ -51,7 +52,8 @@
             "mimo",
             "mimo v2.6",
             "mimo-v2.6"
-          ]
+          ],
+          "memory_budget_tokens": 800
         },
         "glm-5.3-flash-free": {
           "id": "opencode/glm-5.3-flash-free",
@@ -61,7 +63,8 @@
             "glm",
             "glm 5.3",
             "glm-5.3"
-          ]
+          ],
+          "memory_budget_tokens": 800
         },
         "minimax-m3.1-flash-free": {
           "id": "opencode/minimax-m3.1-flash-free",
@@ -70,7 +73,8 @@
           "aliases": [
             "minimax",
             "minimax m3.1"
-          ]
+          ],
+          "memory_budget_tokens": 800
         },
         "nemotron-3.5-lightning-free": {
           "id": "opencode/nemotron-3.5-lightning-free",
@@ -79,7 +83,8 @@
           "aliases": [
             "nemotron lightning",
             "nemotron 3.5 lightning"
-          ]
+          ],
+          "memory_budget_tokens": 800
         },
         "nemotron-3.5-super-vl-free": {
           "id": "opencode/nemotron-3.5-super-vl-free",
@@ -89,7 +94,8 @@
             "nemotron",
             "nemotron super",
             "nemotron 3.5 super"
-          ]
+          ],
+          "memory_budget_tokens": 800
         },
         "longcat-2.5-free": {
           "id": "opencode/longcat-2.5-free",
@@ -97,13 +103,15 @@
           "cost_output_per_m": 0,
           "aliases": [
             "longcat"
-          ]
+          ],
+          "memory_budget_tokens": 800
         },
         "beam-free": {
           "id": "opencode/beam-free",
           "cost_input_per_m": 0,
           "cost_output_per_m": 0,
-          "aliases": []
+          "aliases": [],
+          "memory_budget_tokens": 800
         },
         "big-pickle": {
           "id": "opencode/big-pickle",
@@ -112,7 +120,8 @@
           "aliases": [
             "big pickle",
             "big-pickle"
-          ]
+          ],
+          "memory_budget_tokens": 800
         }
       }
     },
@@ -130,7 +139,8 @@
           "aliases": [
             "vibe glm flash",
             "vibe glm 5.3 flash"
-          ]
+          ],
+          "memory_budget_tokens": 800
         },
         "vibe-glm-5.3": {
           "id": "glm-5-3",
@@ -141,7 +151,8 @@
           "aliases": [
             "vibe glm",
             "vibe glm 5.3"
-          ]
+          ],
+          "memory_budget_tokens": 800
         }
       }
     },
@@ -163,7 +174,8 @@
             "muse",
             "muse spark",
             "muse contributor"
-          ]
+          ],
+          "memory_budget_tokens": 800
         }
       }
     },
@@ -181,7 +193,8 @@
             "luna",
             "gpt-6 luna",
             "6-luna"
-          ]
+          ],
+          "memory_budget_tokens": 2000
         },
         "gpt-5.6-luna": {
           "id": "gpt-5.6-luna",
@@ -193,7 +206,8 @@
             "gpt-5.6 luna",
             "5.6-luna",
             "5.6 luna"
-          ]
+          ],
+          "memory_budget_tokens": 2000
         },
         "gpt-5.6-terra": {
           "id": "gpt-5.6-terra",
@@ -205,7 +219,8 @@
             "terra",
             "5.6-terra",
             "5.6 terra"
-          ]
+          ],
+          "memory_budget_tokens": 2000
         }
       }
     },
@@ -220,7 +235,8 @@
           "aliases": [
             "haiku",
             "haiku 5.5"
-          ]
+          ],
+          "memory_budget_tokens": 2000
         },
         "haiku-4.5": {
           "id": "claude-haiku-4-5-20251001",
@@ -228,7 +244,8 @@
           "cost_output_per_m": 5,
           "aliases": [
             "haiku 4.5"
-          ]
+          ],
+          "memory_budget_tokens": 2000
         },
         "sonnet-5": {
           "id": "claude-sonnet-5",
@@ -236,7 +253,8 @@
           "cost_output_per_m": 10,
           "aliases": [
             "sonnet 5"
-          ]
+          ],
+          "memory_budget_tokens": 2000
         },
         "sonnet-5.5": {
           "id": "claude-sonnet-5-5",
@@ -245,7 +263,8 @@
           "aliases": [
             "sonnet",
             "sonnet 5.5"
-          ]
+          ],
+          "memory_budget_tokens": 2000
         },
         "opus-5.5": {
           "id": "claude-opus-5-5",
@@ -255,10 +274,22 @@
             "opus 5.5",
             "opus-5.5",
             "opus-5-5"
-          ]
+          ],
+          "memory_budget_tokens": 2000
         }
       }
     }
+  },
+  "memory": {
+    "enabled": true,
+    "track_files": true,
+    "file_budget_ms": 2000,
+    "default_budget_tokens": 1200,
+    "min_task_chars": 20,
+    "max_pages": 5,
+    "l0_tokens": 300,
+    "l1_tokens": 400,
+    "recent_turns_verbatim": 3
   },
   "watchdog": {
     "initial_timeout_ms": 30000,

@@ -18,9 +18,20 @@ export function fsck(repo) {
   return spawnSync('git', ['--git-dir', repo, 'fsck', '--strict', '--no-dangling', '--no-progress'], { encoding: 'utf8' });
 }
 
+// Git for Windows cannot open \\.\nul as a config file, so an empty file stands in for "no config".
+let emptyConfig = null;
+function emptyGitConfig() {
+  if (!emptyConfig) {
+    emptyConfig = path.join(os.tmpdir(), `ai-factory-empty-gitconfig-${process.pid}`);
+    fs.writeFileSync(emptyConfig, '');
+    process.on('exit', () => { try { fs.unlinkSync(emptyConfig); } catch {} });
+  }
+  return emptyConfig;
+}
+
 // Runs git in a fixture repository without inheriting the user's global config or signing setup.
 export function git(cwd, args, extra = {}) {
-  const env = { ...process.env, GIT_CONFIG_GLOBAL: os.devNull, GIT_CONFIG_NOSYSTEM: '1',
+  const env = { ...process.env, GIT_CONFIG_GLOBAL: emptyGitConfig(), GIT_CONFIG_NOSYSTEM: '1',
     GIT_AUTHOR_NAME: 'fixture', GIT_AUTHOR_EMAIL: 'fixture@localhost',
     GIT_COMMITTER_NAME: 'fixture', GIT_COMMITTER_EMAIL: 'fixture@localhost', ...(extra.env || {}) };
   const result = spawnSync('git', args, { cwd, encoding: 'utf8', env, ...extra, env });

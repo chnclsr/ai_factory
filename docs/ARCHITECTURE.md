@@ -22,4 +22,21 @@ The per-engine health gate checks cached quota and circuit-breaker state before 
 
 Every completed router invocation prints an `[AI FACTORY EXECUTION REPORT]` with `path`, `choices`, `errors`, and `succeed_with`. `path` starts with `gemini` as the caller label and includes only engines attempted **inside that invocation**. It cannot reconstruct earlier independent router calls. `[OK]` on a Gemini handoff means delegation occurred; the parent agent must still complete and verify the task. Callers should quote the report rather than infer success from a model's prose.
 
+## Memory layer
+
+`src/memory/` is the cross-call memory described in [memory-plan.md](memory-plan.md). It never imports the router or `lib/paths.mjs`; the router passes the repository path and the `memory` config section in, and calls it at three points only: `resolveSession` before the attempts loop, `buildPrompt` for each attempt's task text, and `recordTurn` before the report. With `memory.enabled = false` the module is never loaded.
+
+| File | Role |
+|---|---|
+| `gitobj.mjs` | Writes loose git objects in JS (no git process) and moves refs with git's `.lock` protocol plus a FIFO waiter queue |
+| `store.mjs` | One commit per write on `refs/heads/p/<project>`, built under the ref lock; the `Seq:` trailer is the project's total order. Page versioning |
+| `project.mjs` | Project key from `--project`, `.ai-factory.toml`, the `upstream`/`origin` remote (read from the git config file) or the folder name |
+| `sanitize.mjs` | Masks credentials and bounds sizes for every persisted string; neutralises instruction-like text before injection |
+| `worktree.mjs` | Before/after snapshots of the user's project via a temporary `GIT_INDEX_FILE`; the diff between them is the turn's own change |
+| `session.mjs` | Turn log (`sessions/<sid>.jsonl`), session meta and aliases |
+| `index.mjs` | The facade the router calls; every method catches its own errors and logs `[AI Factory Memory] …` |
+| `cli.mjs` | `node router.mjs memory …` inspection and revert commands |
+
+Memory errors never fail a task: a broken store, a slow snapshot or a missing git binary produces one log line and the call continues. File tracking costs git processes on the write path only (two per snapshot, two for the diff).
+
 The interactive HTML diagrams are self-contained. Their editable sources are the adjacent JSON files, validated with Archify's showcase profile. Diagram text, guided views, and viewer controls are in English.

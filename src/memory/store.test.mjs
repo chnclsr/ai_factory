@@ -50,13 +50,14 @@ for (let i = 0; i < 50; i++) {
   });
 }
 `);
-  const runs = [0, 1, 2, 3].map(id => new Promise((resolve, reject) => {
+  const runs = [0, 1, 2, 3].map(id => new Promise(resolve => {
     const child = spawn(process.execPath, [worker, repo, String(id)], { stdio: ['ignore', 'pipe', 'pipe'] });
     let err = '';
     child.stderr.on('data', d => { err += d; });
-    child.on('close', code => code === 0 ? resolve() : reject(new Error(err)));
+    child.on('close', code => resolve({ id, code, err: err.split('\n').slice(0, 6).join('\n') }));
   }));
-  await Promise.all(runs);
+  const outcomes = await Promise.all(runs);
+  assert.deepEqual(outcomes.filter(o => o.code !== 0), [], JSON.stringify(outcomes, null, 1));
   const seqs = [];
   let sha = readRef(repo, projectRef('race'));
   while (sha) {

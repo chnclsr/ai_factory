@@ -14,21 +14,35 @@ import { spawnSync } from 'node:child_process';
 
 export const AUTHOR = 'ai-factory <ai-factory@localhost>';
 const ZERO_SHA = /^[0-9a-f]{40}$/;
-const LOCK_STALE_MS = 30000;
+// A holder keeps the lock for one tree build (milliseconds); 10 s means it died holding it.
+const LOCK_STALE_MS = 10000;
+const RETRYABLE = ['EPERM', 'EACCES', 'EBUSY'];
 const sleepCell = new Int32Array(new SharedArrayBuffer(4));
 
 export function sleepSync(ms) {
   Atomics.wait(sleepCell, 0, 0, Math.max(0, ms));
 }
 
-// Windows refuses rename while another process holds the target open; retry briefly.
-export function renameWithRetry(from, to, attempts = 12) {
-  for (let i = 0; ; i++) {
-    try { fs.renameSync(from, to); return; } catch (err) {
-      if (i >= attempts || !['EPERM', 'EACCES', 'EBUSY'].includes(err.code)) throw err;
-      sleepSync(5 + Math.floor(Math.random() * 15));
+// Windows refuses rename or unlink while another process (often a virus scanner) still holds the
+// file open. Retry with backoff for about two seconds before giving up.
+function retryBusy(fn, budgetMs = 2000) {
+  const deadline = Date.now() + budgetMs;
+  let delay = 2;
+  for (;;) {
+    try { return fn(); } catch (err) {
+      if (!RETRYABLE.includes(err.code) || Date.now() > deadline) throw err;
+      sleepSync(delay + Math.floor(Math.random() * delay));
+      delay = Math.min(delay * 2, 50);
     }
   }
+}
+
+export function renameWithRetry(from, to) {
+  retryBusy(() => fs.renameSync(from, to));
+}
+
+export function unlinkWithRetry(file) {
+  try { retryBusy(() => fs.unlinkSync(file)); } catch (err) { if (err.code !== 'ENOENT') throw err; }
 }
 
 export function initRepo(repoDir) {
@@ -286,33 +300,59 @@ export function listRefs(repoDir, prefix) {
   return out.sort();
 }
 
-function acquireLock(lockFile, deadlineMs) {
+function pidAlive(pid) {
+  if (!Number.isSafeInteger(pid) || pid <= 0) return false;
+  try { process.kill(pid, 0); return true; } catch (err) { return err.code === 'EPERM'; }
+}
+
+// The ref lock itself is git's "<ref>.lock". On top of it, writers take a ticket (an empty
+// directory, which on-access scanners ignore) in a per-ref queue and only try the lock once every
+// older ticket is gone or belongs to a dead process. Without the queue a writer that releases and
+// immediately re-takes the lock can starve the others when commits are slow.
+function acquireLock(lockFile, queueDir, deadlineMs) {
   const deadline = Date.now() + deadlineMs;
-  let delay = 1;
   fs.mkdirSync(path.dirname(lockFile), { recursive: true });
-  for (;;) {
-    try {
-      return fs.openSync(lockFile, 'wx');
-    } catch (err) {
-      if (err.code !== 'EEXIST' && err.code !== 'EPERM' && err.code !== 'EACCES') throw err;
-      try {
-        // A writer that crashed while holding the lock leaves it behind.
-        if (Date.now() - fs.statSync(lockFile).mtimeMs > LOCK_STALE_MS) { fs.unlinkSync(lockFile); continue; }
-      } catch {}
+  fs.mkdirSync(queueDir, { recursive: true });
+  const ticket = `${String(Date.now()).padStart(15, '0')}-${process.pid}-${crypto.randomBytes(4).toString('hex')}`;
+  const ticketDir = path.join(queueDir, ticket);
+  fs.mkdirSync(ticketDir);
+  let delay = 1;
+  try {
+    for (;;) {
+      let blocked = false;
+      for (const name of fs.readdirSync(queueDir).sort()) {
+        if (name >= ticket) break;
+        if (pidAlive(Number(name.split('-')[1]))) { blocked = true; break; }
+        try { fs.rmdirSync(path.join(queueDir, name)); } catch {}
+      }
+      if (!blocked) {
+        try {
+          return fs.openSync(lockFile, 'wx');
+        } catch (err) {
+          if (err.code !== 'EEXIST' && err.code !== 'EPERM' && err.code !== 'EACCES') throw err;
+          try {
+            // A writer that crashed while holding the lock leaves it behind.
+            if (Date.now() - fs.statSync(lockFile).mtimeMs > LOCK_STALE_MS) { unlinkWithRetry(lockFile); continue; }
+          } catch {}
+        }
+      }
       if (Date.now() > deadline) throw new Error(`ref lock busy: ${lockFile}`);
-      sleepSync(delay + Math.floor(Math.random() * delay * 2));
-      delay = Math.min(delay * 2, 25);
+      sleepSync(delay + Math.floor(Math.random() * delay));
+      delay = Math.min(delay * 2, 8);
     }
+  } finally {
+    try { fs.rmdirSync(ticketDir); } catch {}
   }
 }
 
 // Serialises writers on one ref. build(oldSha) runs while the lock is held and returns the new
 // commit sha (or null to leave the ref as is). The old value is re-read under the lock, so a
 // writer can never move a ref from a value it did not build on.
-export function updateRefLocked(repoDir, refName, build, { lockTimeoutMs = 10000 } = {}) {
+export function updateRefLocked(repoDir, refName, build, { lockTimeoutMs = 20000 } = {}) {
   const file = refFile(repoDir, refName);
   const lockFile = file + '.lock';
-  const fd = acquireLock(lockFile, lockTimeoutMs);
+  const queueDir = path.join(repoDir, 'ai-factory-locks', refName.replaceAll('/', '__'));
+  const fd = acquireLock(lockFile, queueDir, lockTimeoutMs);
   let renamed = false;
   try {
     const oldSha = readRef(repoDir, refName);
@@ -327,7 +367,7 @@ export function updateRefLocked(repoDir, refName, build, { lockTimeoutMs = 10000
   } finally {
     if (!renamed) {
       try { fs.closeSync(fd); } catch {}
-      try { fs.unlinkSync(lockFile); } catch {}
+      try { unlinkWithRetry(lockFile); } catch {}
     }
   }
 }
