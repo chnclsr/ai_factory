@@ -271,6 +271,9 @@ function killProcessTree(pid) {
   } catch (e) {}
 }
 
+// Engines whose stdout is a stream of JSON events (one per line) that runCommand parses.
+const JSON_ENGINES = ['opencode', 'claude', 'vibe'];
+
 async function runCommand(cmdString, cwd, engineName, config) {
   const initialTimeoutMs = config?.watchdog?.initial_timeout_ms || 30000; // \u0130lk 30s hi\u00e7 \u00e7\u0131kt\u0131 gelmezse kilitlenme say\u0131l\u0131r
   const idleTimeoutMs = config?.watchdog?.idle_timeout_ms || 120000; // \u00c7\u0131kt\u0131 sonras\u0131 120s sessizlik zaman a\u015f\u0131m\u0131
@@ -290,10 +293,20 @@ async function runCommand(cmdString, cwd, engineName, config) {
   let hasResponse = false;
   let cliError = false;
   let jsonRemainder = '';
+  const seenVibeMessages = new Set();
   function inspectJsonLine(line) {
     try {
       const event = JSON.parse(line);
-      sessionId = event.sessionID || event.session_id || sessionId;
+      sessionId = event.sessionID || event.session_id || event.sessionId || sessionId;
+      if (engineName === 'vibe' && event.type === 'message' && event.role === 'assistant' &&
+        event.generationStatus === 'completed' && !seenVibeMessages.has(event.id)) {
+        seenVibeMessages.add(event.id);
+        const text = (event.content || []).filter(part => part.type === 'text').map(part => part.text).join('');
+        if (text.trim()) {
+          hasResponse = true;
+          process.stdout.write(text + '\n');
+        }
+      }
       if (event.type === 'error' || event.is_error) cliError = true;
       if (event.type === 'text' && event.part?.text) {
         hasResponse = true;
@@ -345,13 +358,13 @@ async function runCommand(cmdString, cwd, engineName, config) {
       previousCpuMs = null;
       lastCpuProgressAt = lastActivityAt;
       const str = chunk.toString('utf8');
-      if (streamName === 'stdout' && (engineName === 'opencode' || engineName === 'claude')) {
+      if (streamName === 'stdout' && (JSON_ENGINES.includes(engineName))) {
         jsonRemainder += str;
         const jsonLines = jsonRemainder.split('\n');
         jsonRemainder = jsonLines.pop();
         for (const line of jsonLines) inspectJsonLine(line);
       }
-      if (streamName === 'stdout' && engineName !== 'opencode' && engineName !== 'claude') {
+      if (streamName === 'stdout' && !JSON_ENGINES.includes(engineName)) {
         process.stdout.write(str);
       } else if (streamName === 'stderr') {
         process.stderr.write(str);
@@ -422,7 +435,7 @@ async function runCommand(cmdString, cwd, engineName, config) {
       if (isFinished) return;
       isFinished = true;
       clearInterval(watchdogInterval);
-      if (jsonRemainder.trim() && (engineName === 'opencode' || engineName === 'claude')) inspectJsonLine(jsonRemainder);
+      if (jsonRemainder.trim() && (JSON_ENGINES.includes(engineName))) inspectJsonLine(jsonRemainder);
       // P1 D\u00fczeltmesi: Sinyalle kapat\u0131ld\u0131ysa (signal != null) veya code null ise asla 0 sayma!
       const effectiveCode = signal ? 1 : (code ?? 1);
       resolve({
@@ -491,7 +504,17 @@ function parseCliArgs() {
   return options;
 }
 
-const ENGINES = ['opencode', 'muse', 'codex', 'claude'];
+const ENGINES = ['opencode', 'muse', 'codex', 'claude', 'vibe'];
+
+// Vibe picks its cheap default model unless the task text carries a complexity keyword.
+function vibeModelFor(task, config) {
+  const vibe = config?.engines?.vibe || {};
+  const lower = (task || '').toLowerCase();
+  const complex = (config?.routing_rules?.complexity_keywords || []).find(kw => hasKeyword(lower, kw));
+  return complex
+    ? { model: vibe.complex_model || vibe.default_model, reason: `karmaşık görev anahtar kelimesi: ${complex}` }
+    : { model: vibe.default_model, reason: 'standart görev' };
+}
 
 function normalizeName(value) {
   return String(value || '').trim().toLowerCase().replace(/[\s_]+/g, '-');
@@ -543,7 +566,8 @@ function decideEngineAndModel(task, config, forcedEngine, forcedModel) {
     if (engine === 'muse') return { engine, model: 'muse-spark-1.3-contributor', reason: 'Kullan\u0131c\u0131 taraf\u0131ndan zorland\u0131' };
     const found = forcedModel ? findModel(forcedModel, config, engine) : null;
     if (forcedModel && !found && engine === 'codex') throw new Error(`Unsupported codex model: ${forcedModel}`);
-    const model = found ? found.model : (forcedModel || config.engines[engine].default_model);
+    const model = found ? found.model
+      : (forcedModel || (engine === 'vibe' ? vibeModelFor(task, config).model : config.engines[engine].default_model));
     return { engine, model, reason: 'Kullan\u0131c\u0131 taraf\u0131ndan zorland\u0131' };
   }
 
@@ -567,12 +591,17 @@ function decideEngineAndModel(task, config, forcedEngine, forcedModel) {
   for (const engine of ENGINES) {
     for (const kw of (config?.routing_rules?.[`${engine}_keywords`] || [])) {
       if (hasKeyword(lower, kw)) {
-        return { engine, model: config.engines[engine].default_model, reason: `${engine} anahtar kelimesi: ${kw}` };
+        const model = engine === 'vibe' ? vibeModelFor(task, config).model : config.engines[engine].default_model;
+        return { engine, model, reason: `${engine} anahtar kelimesi: ${kw}` };
       }
     }
   }
 
   const first = config.fallback_chain[0];
+  if (first.engine === 'vibe') {
+    const pick = vibeModelFor(task, config);
+    return { engine: 'vibe', model: pick.model, reason: `Varsay\u0131lan Vibe zinciri (${pick.reason})` };
+  }
   return { engine: first.engine, model: first.model, reason: 'Varsay\u0131lan \u00fccretsiz zincir' };
 }
 
@@ -635,7 +664,21 @@ async function executeOpenCode(task, model, cwd, resumeSessionId, config) {
   }
 }
 
-const CLAUDE_EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'];
+// Mistral Vibe CLI, programmatic mode. --model takes an alias from ~/.vibe/config.toml.
+async function executeVibe(task, model, cwd, resumeSessionId, config) {
+  const promptFile = stateFile(`.vibe_prompt_${Date.now()}_${crypto.randomUUID()}.txt`);
+  fs.writeFileSync(promptFile, task, 'utf8');
+  // --model applies to new sessions only; a resumed session keeps the model it started with.
+  let cmd = `vibe --workdir "${cwd}" --agent auto-approve --prompt-file "${promptFile}" --output streaming --max-turns 40 --trust`;
+  cmd += resumeSessionId ? ` --resume ${resumeSessionId}` : ` --model ${model}`;
+  try {
+    return await runCommand(cmd, cwd, 'vibe', config);
+  } finally {
+    try { fs.unlinkSync(promptFile); } catch (e) {}
+  }
+}
+
+const CLAUDE_EFFORT_LEVELS =['low', 'medium', 'high', 'xhigh', 'max'];
 
 // Picks Claude's --effort: an explicit --reasoning-effort flag wins outright; otherwise a level the
 // user names in the task text (e.g. "max effort", "xhigh") also wins, even above the auto cap; absent
@@ -738,7 +781,7 @@ async function main() {
 
   const options = parseCliArgs();
   const config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
-  if (options.engine && !['muse', 'codex', 'opencode', 'claude', 'gemini'].includes(options.engine)) throw new Error('Unknown engine: ' + options.engine);
+  if (options.engine && !['muse', 'codex', 'opencode', 'claude', 'vibe', 'gemini'].includes(options.engine)) throw new Error('Unknown engine: ' + options.engine);
   for (const [key, value] of Object.entries({ model: options.model, cwd: options.cwd })) {
     if (/[\x00-\x1f"%&|<>^!$\x60]/.test(value)) throw new Error('Unsafe shell argument: ' + key);
   }
@@ -758,7 +801,7 @@ AI Factory Smart Router CLI (v2.1 - Hardened & Supervised)
 Kullan\u0131m:
   node router.mjs --task "G\u00f6rev metni" [--name "oturum-adi"] [--cwd "dizin"]
   node router.mjs --resume "oturum-adi" --task "Devam sorusu"
-  node router.mjs [--engine opencode|muse|codex|claude] [--model model-adi] --task "..."
+  node router.mjs [--engine vibe|opencode|muse|codex|claude] [--model model-adi] --task "..."
   node router.mjs --engine claude --model <model> --reasoning-effort low|medium|high|xhigh|max --task "..."
   node router.mjs --quota   # Codex, Antigravity ve Muse canlı kotalarını listeler
     `);
@@ -783,7 +826,7 @@ Kullan\u0131m:
     }
   }
 
-  if (targetEngine && !['muse', 'codex', 'opencode', 'claude', 'gemini'].includes(targetEngine)) throw new Error('Unsupported engine in saved session: ' + targetEngine);
+  if (targetEngine && !['muse', 'codex', 'opencode', 'claude', 'vibe', 'gemini'].includes(targetEngine)) throw new Error('Unsupported engine in saved session: ' + targetEngine);
 
   {
     // Always resolve through aliases, even when both engine and model were forced via flags/resume,
@@ -794,7 +837,7 @@ Kullan\u0131m:
     console.log(`[AI Factory Smart Router] Karar: ${targetEngine.toUpperCase()} (${targetModel}) -> Neden: ${decision.reason}`);
   }
 
-  if (options.resume && (targetEngine === 'opencode' || targetEngine === 'claude')) {
+  if (options.resume && JSON_ENGINES.includes(targetEngine)) {
     if (!resumeSessionId) throw new Error(`${targetEngine} session has no ID to resume`);
     if (!(targetEngine === 'opencode' ? /^ses_[A-Za-z0-9]+$/ : /^[0-9a-fA-F-]{36}$/).test(resumeSessionId)) {
       throw new Error(`Invalid ${targetEngine} session ID`);
@@ -825,7 +868,7 @@ Kullan\u0131m:
   }
   // Resolve every model before launching anything so a disallowed model never runs.
   for (const attempt of attempts) {
-    if (attempt.engine === 'opencode' || attempt.engine === 'claude') {
+    if (attempt.engine === 'opencode' || attempt.engine === 'claude' || attempt.engine === 'vibe') {
       attempt.model = resolveExternalModel(attempt.engine, attempt.model, config);
     } else if (attempt.engine === 'codex') {
       resolveCodexModel(attempt.model, config);
@@ -847,6 +890,7 @@ Kullan\u0131m:
   }
   const executors = {
     opencode: executeOpenCode,
+    vibe: executeVibe,
     claude: (task, model, cwd, resumeSessionId, cfg) => executeClaude(task, model, cwd, resumeSessionId, cfg, claudeEffort.level),
     muse: executeMuse,
     codex: executeCodex
@@ -859,7 +903,7 @@ Kullan\u0131m:
     }
     if (!choices.includes(engine)) choices.push(engine);
     // OpenCode models are tracked separately so one rate-limited model does not block the others.
-    const healthKey = engine === 'opencode' ? `opencode:${model}` : engine;
+    const healthKey = engine === 'opencode' || engine === 'vibe' ? `${engine}:${model}` : engine;
     const gate = canExecuteEngine(healthKey, config);
     if (!gate.allowed) {
       console.warn(`[AI Factory Pre-Flight Gate] ⛔ ${engine}(${model}) kullanılamıyor (${gate.reason}).`);
@@ -872,7 +916,7 @@ Kullan\u0131m:
       const res = await executors[engine](options.task, model, options.cwd, attempt.sessionId, config);
       lastOutput = res.output;
       if (res.sessionId) lastSessionId = res.sessionId;
-      const jsonEngine = engine === 'opencode' || engine === 'claude';
+      const jsonEngine = JSON_ENGINES.includes(engine);
       const ok = res.exitCode === 0 && !res.watchdogTimeout &&
         (jsonEngine ? !res.cliError && res.hasResponse : res.output.trim().length > 0);
       if (ok) {
@@ -910,7 +954,7 @@ Kullan\u0131m:
   // Oturum kayd\u0131 (\u00c7\u0131kt\u0131dan dinamik session id yakalan\u0131r)
   if (succeedWith && sessionName) {
     const extractedId = lastSessionId || extractSessionId(lastOutput) || resumeSessionId;
-    if ((targetEngine === 'opencode' || targetEngine === 'claude') && !extractedId) {
+    if (JSON_ENGINES.includes(targetEngine) && !extractedId) {
       console.warn(`[AI Factory Registry] ${targetEngine} session ID was not returned; '${sessionName}' was not saved.`);
     } else {
       if (['__proto__', 'constructor', 'prototype'].includes(sessionName)) throw new Error('Invalid session name');

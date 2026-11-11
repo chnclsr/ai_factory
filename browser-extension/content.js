@@ -2,7 +2,7 @@
 // instruction that is inserted in front of the prompt when the message is sent, so the agent
 // routes the work through AI Factory with exactly those engines and models:
 //
-//   actor  does the task (default on:  opencode / deepseek flash)
+//   actor  does the task (default on:  vibe / glm-5.3-flash)
 //   critic reviews it    (default off: claude / opus-5.5)
 //
 // Google's markup is minified and changes between deployments, so nothing here depends on their
@@ -54,7 +54,7 @@ const CRITIC_MODEL = ENGINES.claude?.models.includes('opus-5.5') ? 'opus-5.5' : 
 // extra reasoning pays for itself; "model" and "effort" empty mean the engine's own default.
 function defaultState() {
   return {
-    actor: { enabled: true, engine: ENGINES.opencode ? 'opencode' : 'auto', model: '', effort: '' },
+    actor: { enabled: true, engine: ENGINES.vibe ? 'vibe' : ENGINES.opencode ? 'opencode' : 'auto', model: '', effort: '' },
     critic: { enabled: false, engine: 'claude', model: CRITIC_MODEL, effort: 'high' }
   };
 }

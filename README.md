@@ -35,6 +35,7 @@ AGY is instructed to inspect actual progress while a long task runs. If its time
 
 | Tool (`--engine`) | CLI used | Default model | Model names accepted with `--model` |
 |---|---|---|---|
+| Vibe (`vibe`) | `vibe --prompt-file` | `vibe-glm-5.3-flash` (first in the default chain) | `vibe-glm-5.3-flash`, `vibe-glm-5.3`. Complexity keywords (architecture, refactor, ...) select `vibe-glm-5.3`. The CLI's `--model` takes an alias, so `~/.vibe/config.toml` must define the aliases `zai-glm-5-3-flash` and `glm-5-3`. Runs with `--agent auto-approve` and `--output streaming`; named sessions resume via `vibe --resume <id>` |
 | Muse (`muse`) | `muse exec` | `muse-spark-1.3-contributor` | Fixed to `muse-spark-1.3-contributor`; contributor mode is always enabled |
 | Codex (`codex`) | `codex exec` | `gpt-6-luna` | `gpt-6-luna`, `gpt-5.6-luna`, `gpt-5.6-terra` (free tier; Sol/Astra/gpt-5.5 are rejected) |
 | OpenCode (`opencode`) | `opencode run` | `deepseek-v4.1-flash-free` | The 10 configured free models listed below |

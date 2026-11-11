@@ -40,7 +40,7 @@ CLI takes `--reasoning-effort`.
 With the defaults and the critic switched on, sending `testi calistir` produces:
 
 ```
-[AI Factory] Actor-critic, in this order. 1) Actor: delegate the task through the AI Factory router with --engine opencode --model deepseek-v4.1-flash-free --no-fallback. 2) Critic: once the actor is done, delegate a review through the router with --engine claude --model opus-5.5 --reasoning-effort high --no-fallback. Give the critic the original task, the actor's reported result and the paths of the files it changed, and ask for a verdict: approve, or a list of concrete problems with file and line. 3) Report both execution reports and the critic's verdict. Do not apply the critic's fixes unless I ask. Task: testi calistir
+[AI Factory] Actor-critic, in this order. 1) Actor: delegate the task through the AI Factory router with --engine vibe --model zai-glm-5-3-flash --no-fallback. 2) Critic: once the actor is done, delegate a review through the router with --engine claude --model opus-5.5 --reasoning-effort high --no-fallback. Give the critic the original task, the actor's reported result and the paths of the files it changed, and ask for a verdict: approve, or a list of concrete problems with file and line. 3) Report both execution reports and the critic's verdict. Do not apply the critic's fixes unless I ask. Task: testi calistir
 ```
 
 The critic is a separate router call, so it costs a Claude Opus 5.5 request on your account each

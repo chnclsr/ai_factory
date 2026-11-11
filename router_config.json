@@ -4,6 +4,14 @@
   "description": "Antigravity minimal token harcar; isler once OpenCode ucretsiz modellerine, sonra Muse Contributor ve Codex ucretsiz modellerine delege edilir.",
   "fallback_chain": [
     {
+      "engine": "vibe",
+      "model": "vibe-glm-5.3-flash"
+    },
+    {
+      "engine": "vibe",
+      "model": "vibe-glm-5.3"
+    },
+    {
       "engine": "opencode",
       "model": "deepseek-v4.1-flash-free"
     },
@@ -117,6 +125,35 @@
           "aliases": [
             "big pickle",
             "big-pickle"
+          ]
+        }
+      }
+    },
+    "vibe": {
+      "type": "vibe_cli",
+      "default_model": "vibe-glm-5.3-flash",
+      "complex_model": "vibe-glm-5.3",
+      "models": {
+        "vibe-glm-5.3-flash": {
+          "id": "zai-glm-5-3-flash",
+          "cost_input_per_m": 0,
+          "cost_output_per_m": 0,
+          "role": "default_fast",
+          "description": "Vibe CLI varsayilan model: rutin gorevler",
+          "aliases": [
+            "vibe glm flash",
+            "vibe glm 5.3 flash"
+          ]
+        },
+        "vibe-glm-5.3": {
+          "id": "glm-5-3",
+          "cost_input_per_m": 0,
+          "cost_output_per_m": 0,
+          "role": "complex_tasks",
+          "description": "Vibe CLI kompleks gorevler icin model",
+          "aliases": [
+            "vibe glm",
+            "vibe glm 5.3"
           ]
         }
       }
@@ -265,6 +302,10 @@
     ],
     "claude_keywords": [
       "claude"
+    ],
+    "vibe_keywords": [
+      "vibe",
+      "mistral vibe"
     ],
     "muse_keywords": [
       "muse",

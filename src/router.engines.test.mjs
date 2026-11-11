@@ -126,6 +126,8 @@ if ((process.env.AI_FACTORY_FAIL || '').split(',').includes(model)) {
 }
 process.stdout.write(engine === 'opencode'
   ? JSON.stringify({ type: 'text', sessionID: 'ses_Chain1', part: { text: 'MOCK_OK' } }) + '\\n'
+  : engine === 'vibe'
+  ? JSON.stringify({ type: 'message', role: 'assistant', id: 'a1', generationStatus: 'completed', sessionId: '123e4567-e89b-42d3-a456-426614174000', content: [{ type: 'text', text: 'MOCK_OK' }] }) + '\\n'
   : 'MOCK_OK\\n');
 `);
   fs.writeFileSync(preload, `
@@ -133,7 +135,7 @@ import { createRequire, syncBuiltinESMExports } from 'node:module';
 const childProcess = createRequire(import.meta.url)('node:child_process');
 const realSpawn = childProcess.spawn;
 childProcess.spawn = (command, args, options) => {
-  const engine = typeof command === 'string' && (command.match(/^(opencode|muse|codex|claude)\\b/) || [])[1];
+  const engine = typeof command === 'string' && (command.match(/^(opencode|muse|codex|claude|vibe)\\b/) || [])[1];
   if (engine) return realSpawn(process.execPath, [process.env.AI_FACTORY_MOCK, engine, command], { ...options, shell: false });
   return realSpawn(command, args, options);
 };
@@ -157,15 +159,22 @@ syncBuiltinESMExports();
 
   let result = run('', '--task', 'Fix the failing test');
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.deepEqual(calls().map(c => c.model), ['opencode/deepseek-v4.1-flash-free']);
+  assert.deepEqual(calls().map(c => c.model), ['zai-glm-5-3-flash']);
 
-  result = run('opencode/deepseek-v4.1-flash-free,opencode/mimo-v2.6-flash-free,opencode/glm-5.3-flash-free', '--task', 'Fix it');
+  result = run('', '--task', 'Review this architecture and refactor it');
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.deepEqual(calls().map(c => c.model), ['opencode/deepseek-v4.1-flash-free', 'opencode/mimo-v2.6-flash-free',
-    'opencode/glm-5.3-flash-free', 'muse-spark-1.3-contributor']);
+  assert.deepEqual(calls().map(c => c.model), ['glm-5-3']);
+
+  result = run('', '--task', 'Use vibe for this');
+  assert.deepEqual(calls().map(c => c.model), ['zai-glm-5-3-flash']);
+
+  result = run('zai-glm-5-3-flash,glm-5-3,opencode/deepseek-v4.1-flash-free,opencode/mimo-v2.6-flash-free,opencode/glm-5.3-flash-free', '--task', 'Fix it');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.deepEqual(calls().map(c => c.model), ['zai-glm-5-3-flash', 'glm-5-3', 'opencode/deepseek-v4.1-flash-free',
+    'opencode/mimo-v2.6-flash-free', 'opencode/glm-5.3-flash-free', 'muse-spark-1.3-contributor']);
   assert.match(result.stdout, /succeed_with: muse-spark-1\.3-contributor/);
 
-  result = run('opencode/deepseek-v4.1-flash-free,opencode/mimo-v2.6-flash-free,opencode/glm-5.3-flash-free,muse-spark-1.3-contributor', '--task', 'Fix it');
+  result = run('zai-glm-5-3-flash,glm-5-3,opencode/deepseek-v4.1-flash-free,opencode/mimo-v2.6-flash-free,opencode/glm-5.3-flash-free,muse-spark-1.3-contributor', '--task', 'Fix it');
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.equal(calls().at(-1).model, 'gpt-6-luna');
 
@@ -175,7 +184,7 @@ syncBuiltinESMExports();
 
   result = run('gpt-5.6-terra', '--task', 'terra ile incele');
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.deepEqual(calls().map(c => c.model).slice(0, 2), ['gpt-5.6-terra', 'opencode/deepseek-v4.1-flash-free']);
+  assert.deepEqual(calls().map(c => c.model).slice(0, 2), ['gpt-5.6-terra', 'zai-glm-5-3-flash']);
 
   result = run('', '--model', 'nemotron', '--task', 'any');
   assert.deepEqual(calls().map(c => c.model), ['opencode/nemotron-3-ultra-free']);
@@ -185,7 +194,7 @@ syncBuiltinESMExports();
   assert.match(result.stdout, /handoff_to_gemini/);
 
   result = run('', '--task', 'Solve the metadata issue');
-  assert.deepEqual(calls().map(c => c.model), ['opencode/deepseek-v4.1-flash-free']);
+  assert.deepEqual(calls().map(c => c.model), ['zai-glm-5-3-flash']);
 
   for (const model of ['gpt-6.1-sol', 'gpt-6-astra', 'sol']) {
     assert.notEqual(run('', '--engine', 'codex', '--model', model, '--task', 'blocked').status, 0);
