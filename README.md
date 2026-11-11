@@ -245,7 +245,22 @@ node router.mjs memory turn diff 2 --session <alias|session id> --cwd <project>
 node router.mjs memory turn revert 2 --session <alias|session id> --cwd <project> --yes
 ```
 
-`turn revert` lists the files first and asks for confirmation; without a terminal it needs `--yes`. Secrets (`sk-…`, `ghp_…`, Telegram bot tokens, `Bearer` values, `.env` style `*_KEY=` assignments) are masked before anything is written. Design and status: [docs/memory-plan.md](docs/memory-plan.md).
+`turn revert` lists the files first and asks for confirmation; without a terminal it needs `--yes`.
+
+Sessions and projects:
+
+- The project comes from `--project`, else a `project = "..."` line in the nearest `.ai-factory.toml`, else the `upstream` or `origin` remote of the git repository at `--cwd`, else the folder name. Switching projects means calling with another `--cwd`; there is no global "current project".
+- Every call belongs to a memory session: `--session <id>`, else `AI_FACTORY_SESSION_ID`, else a new id. `--name` and `--resume` are aliases inside the project, so the same name in two projects means two sessions.
+- `--resume <name> --engine <other>` keeps the same memory session and starts a new conversation in the other engine. Resuming the first engine later continues its own conversation.
+- On the first run with memory enabled, an existing `session_registry.json` is moved into memory and renamed `session_registry.json.migrated`. `--resume <name>` keeps finding the same engine session. Entries without a `cwd` go to the `_unscoped` project; `memory session adopt <name> --cwd <dir>` moves one into a project.
+
+```bash
+node router.mjs memory note add "Deploys go through staging first" --cwd <project>
+node router.mjs memory note add "I prefer small commits" --scope mine
+node router.mjs memory search deploy --scope dir --cwd <project>/services/api
+```
+
+`--scope repo` (default) searches the project; `dir` keeps only turns and notes recorded under that directory; `mine` reads only your personal notes, which never appear in project results. Secrets (`sk-…`, `ghp_…`, Telegram bot tokens, `Bearer` values, `.env` style `*_KEY=` assignments) are masked before anything is written. Design and status: [docs/memory-plan.md](docs/memory-plan.md).
 
 | Key (`memory.*`) | Default | Purpose |
 |---|---|---|

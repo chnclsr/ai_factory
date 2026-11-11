@@ -45,6 +45,11 @@ syncBuiltinESMExports();
     AI_FACTORY_FAKE_CALLS: callsFile,
     AI_FACTORY_DATA_DIR: path.join(dir, 'state')
   };
+  // This test covers the legacy session_registry.json path; memory-backed sessions are tested in src/memory/.
+  const legacyConfig = JSON.parse(fs.readFileSync(path.join(root, 'router_config.json'), 'utf8'));
+  legacyConfig.memory = { ...legacyConfig.memory, enabled: false };
+  env.AI_FACTORY_CONFIG = path.join(dir, 'legacy-config.json');
+  fs.writeFileSync(env.AI_FACTORY_CONFIG, JSON.stringify(legacyConfig));
   const run = (...args) => spawnSync(process.execPath, [router, '--no-fallback', ...args], { cwd: root, env, encoding: 'utf8', timeout: 15000 });
 
   let result = run('--engine', 'opencode', '--model', 'deepseek-v4.1-flash-free', '--name', 'free', '--task', 'first free turn');

@@ -836,7 +836,11 @@ Kullan\u0131m:
   }
 
   const memory = await loadMemory(config);
-  const memoryCtx = memory ? memory.resolveSession({ cwd: options.cwd, session: options.session, project: options.project, scope: options.scope }) : null;
+  const memoryCtx = memory ? memory.resolveSession({
+    cwd: options.cwd, session: options.session, project: options.project, scope: options.scope,
+    name: options.name, resume: options.resume, engine: options.engine, legacyRegistryFile: REGISTRY_FILE
+  }) : null;
+  let resumeSwitched = false;
 
   let targetEngine = options.engine;
   let targetModel = options.model;
@@ -844,8 +848,11 @@ Kullan\u0131m:
   const sessionName = options.name || options.resume;
 
   if (options.resume) {
-    const existing = Object.hasOwn(registry.sessions, options.resume) ? registry.sessions[options.resume] : null;
+    // With memory the alias is looked up in the current project's sessions (migrated from the registry).
+    const existing = memoryCtx ? (memoryCtx.missing ? null : memoryCtx.resume)
+      : Object.hasOwn(registry.sessions, options.resume) ? registry.sessions[options.resume] : null;
     if (existing) {
+      resumeSwitched = Boolean(existing.switched);
       targetEngine = existing.engine;
       targetModel = (targetEngine === 'opencode' || targetEngine === 'claude') && options.model ? options.model : existing.model;
       resumeSessionId = existing.sessionId;
@@ -867,7 +874,7 @@ Kullan\u0131m:
     console.log(`[AI Factory Smart Router] Karar: ${targetEngine.toUpperCase()} (${targetModel}) -> Neden: ${decision.reason}`);
   }
 
-  if (options.resume && JSON_ENGINES.includes(targetEngine)) {
+  if (options.resume && JSON_ENGINES.includes(targetEngine) && !resumeSwitched) {
     if (!resumeSessionId) throw new Error(`${targetEngine} session has no ID to resume`);
     if (!(targetEngine === 'opencode' ? /^ses_[A-Za-z0-9]+$/ : /^[0-9a-fA-F-]{36}$/).test(resumeSessionId)) {
       throw new Error(`Invalid ${targetEngine} session ID`);
@@ -983,7 +990,8 @@ Kullan\u0131m:
   }
 
   // Oturum kayd\u0131 (\u00c7\u0131kt\u0131dan dinamik session id yakalan\u0131r)
-  if (succeedWith && sessionName) {
+  // With memory active the session and its engine ids are recorded by recordTurn instead.
+  if (succeedWith && sessionName && !memoryCtx) {
     const extractedId = lastSessionId || extractSessionId(lastOutput) || resumeSessionId;
     if (JSON_ENGINES.includes(targetEngine) && !extractedId) {
       console.warn(`[AI Factory Registry] ${targetEngine} session ID was not returned; '${sessionName}' was not saved.`);

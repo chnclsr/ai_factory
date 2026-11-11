@@ -33,9 +33,13 @@ Every completed router invocation prints an `[AI FACTORY EXECUTION REPORT]` with
 | `project.mjs` | Project key from `--project`, `.ai-factory.toml`, the `upstream`/`origin` remote (read from the git config file) or the folder name |
 | `sanitize.mjs` | Masks credentials and bounds sizes for every persisted string; neutralises instruction-like text before injection |
 | `worktree.mjs` | Before/after snapshots of the user's project via a temporary `GIT_INDEX_FILE`; the diff between them is the turn's own change |
-| `session.mjs` | Turn log (`sessions/<sid>.jsonl`), session meta and aliases |
+| `session.mjs` | Turn log (`sessions/<sid>.jsonl`), session meta, per-project aliases (`session-aliases.json`) |
+| `migrate.mjs` | One-time move of `session_registry.json` into per-project sessions (`legacy-<name>`), then renames it `.migrated` |
+| `search.mjs` | Scoped term search over pages and turns: `repo`, `dir` (by recorded cwd), `mine` (the separate `refs/heads/personal` ref) |
 | `index.mjs` | The facade the router calls; every method catches its own errors and logs `[AI Factory Memory] …` |
 | `cli.mjs` | `node router.mjs memory …` inspection and revert commands |
+
+With memory enabled, `--name`/`--resume` read and write memory sessions instead of `session_registry.json`. A resume that names a different engine than the session last used starts a new conversation in that engine; the router's "session has no ID to resume" check still applies when the same engine is resumed without a saved ID.
 
 Memory errors never fail a task: a broken store, a slow snapshot or a missing git binary produces one log line and the call continues. File tracking costs git processes on the write path only (two per snapshot, two for the diff).
 

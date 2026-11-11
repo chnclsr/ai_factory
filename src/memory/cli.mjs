@@ -4,11 +4,15 @@
 //   memory turn diff <n> [--session <s>]        the patch recorded for turn n
 //   memory turn revert <n> [--session <s>] [--yes]
 //                                               reverse turn n's patch in the working tree
+//   memory session adopt <alias>                move a migrated _unscoped session into this project
+//   memory note add <text> [--scope repo|mine]  store a note page (mine = personal ref)
+//   memory search <query> [--scope repo|dir|mine]
 
 import fs from 'node:fs';
-import { resolveProject, findGitRepo } from './project.mjs';
-import { snapshotProject, commitProject } from './store.mjs';
-import { findSession, listSessions, readTurns, readMeta, sessionPaths } from './session.mjs';
+import { resolveProject, findGitRepo, UNSCOPED_PROJECT } from './project.mjs';
+import { snapshotProject, commitProject, writePage } from './store.mjs';
+import { findSession, listSessions, readTurns, readMeta, sessionPaths, ALIASES_FILE } from './session.mjs';
+import { search, SCOPES } from './search.mjs';
 import { revertPatch } from './worktree.mjs';
 import { sanitizeValue } from './sanitize.mjs';
 
@@ -17,7 +21,7 @@ function parseArgs(argv) {
   const flags = {};
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg === '--yes' || arg === '-y' || arg === '--global') flags[arg.replace(/^-+/, '')] = true;
+    if (arg === '--yes' || arg === '-y') flags[arg.replace(/^-+/, '')] = true;
     else if (arg.startsWith('--')) flags[arg.slice(2)] = argv[++i] ?? '';
     else positional.push(arg);
   }
@@ -99,6 +103,60 @@ export async function runMemoryCli(argv, { repoDir, cwd = process.cwd(), io: ioO
     return 0;
   }
 
-  io.err('Usage: node router.mjs memory session show [<alias|sid>] | turn diff <n> | turn revert <n> [--yes]\n');
+  if (group === 'note' && action === 'add') {
+    const text = positional.slice(2).join(' ').trim();
+    const scope = flags.scope === 'mine' ? 'mine' : 'repo';
+    if (!text) { io.err('Usage: memory note add <text> [--scope repo|mine] [--slug <name>]\n'); return 1; }
+    const slug = flags.slug || `note-${Date.now().toString(36)}`;
+    writePage(repoDir, project.key, { slug, body: text, cwd: workdir, scope });
+    io.out(`Saved ${scope === 'mine' ? 'personal' : `project ${project.key}`} note ${slug}.\n`);
+    return 0;
+  }
+
+  if (group === 'search') {
+    const query = positional.slice(1).join(' ');
+    const scope = flags.scope || 'repo';
+    if (!SCOPES.includes(scope)) { io.err(`Unknown scope: ${scope} (use ${SCOPES.join(', ')})\n`); return 1; }
+    const hits = search(repoDir, { projectKey: project.key, query, scope, cwd: workdir, limit: Number(flags.limit) || 10 });
+    for (const hit of hits) {
+      const label = hit.kind === 'page' ? `page ${hit.slug}` : `turn ${hit.id}`;
+      io.out(`${label}: ${hit.text.replace(/\s+/g, ' ').slice(0, 160)}\n`);
+    }
+    if (!hits.length) io.out('(no matches)\n');
+    return 0;
+  }
+
+  if (group === 'session' && action === 'adopt') {
+    const name = arg;
+    const unscoped = snapshotProject(repoDir, UNSCOPED_PROJECT);
+    const sid = findSession(unscoped, name);
+    if (!sid) { io.err(`No session "${name}" in ${UNSCOPED_PROJECT}.\n`); return 1; }
+    const paths = sessionPaths(sid);
+    const files = [paths.meta, paths.log].map(file => [file, unscoped.read(file)]).filter(([, text]) => text !== null);
+    commitProject(repoDir, project.key, { subject: `adopt session ${name}`, trailers: { Session: sid, Kind: 'migration' } }, view => {
+      for (const [file, text] of files) {
+        if (file === paths.meta) {
+          const meta = JSON.parse(text);
+          meta.project = project.key;
+          meta.cwd = meta.cwd || workdir;
+          view.write(file, JSON.stringify(meta, null, 2));
+        } else view.writeRaw(file, text);
+      }
+      const aliases = JSON.parse(view.read(ALIASES_FILE) || '{}');
+      aliases[name] = sid;
+      view.write(ALIASES_FILE, JSON.stringify(aliases, null, 2));
+    });
+    commitProject(repoDir, UNSCOPED_PROJECT, { subject: `session ${name} moved to ${project.key}`, trailers: { Session: sid, Kind: 'migration' } }, view => {
+      for (const [file] of files) view.remove(file);
+      const aliases = JSON.parse(view.read(ALIASES_FILE) || '{}');
+      delete aliases[name];
+      view.write(ALIASES_FILE, JSON.stringify(aliases, null, 2));
+    });
+    io.out(`Session "${name}" now belongs to project ${project.key}.\n`);
+    return 0;
+  }
+
+  io.err('Usage: node router.mjs memory session show [<alias|sid>] | session adopt <alias> | turn diff <n> | turn revert <n> [--yes]\n' +
+    '       | note add <text> [--scope repo|mine] | search <query> [--scope repo|dir|mine]\n');
   return 1;
 }
