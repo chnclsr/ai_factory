@@ -262,11 +262,20 @@ node router.mjs memory search deploy --scope dir --cwd <project>/services/api
 
 `--scope repo` (default) searches the project; `dir` keeps only turns and notes recorded under that directory; `mine` reads only your personal notes, which never appear in project results. Secrets (`sk-…`, `ghp_…`, Telegram bot tokens, `Bearer` values, `.env` style `*_KEY=` assignments) are masked before anything is written. Design and status: [docs/memory-plan.md](docs/memory-plan.md).
 
+Before each attempt the engine's task file starts with a `<retrieved-memory untrusted="true">` block, followed by your task unchanged. The block holds only what that engine conversation has not seen yet. A resumed conversation with nothing new gets no block at all. A new engine, or a fallback step, gets the session's earlier turns (task, start of the reply, changed files with `+/-` counts), the previous attempt's error, and up to five related notes or turns from other sessions. Tasks shorter than 20 characters get no block. Nested router calls (`AI_FACTORY_ROUTER_DEPTH > 0`) never get one. Memory is never written to `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` or any other file a harness loads on its own.
+
 | Key (`memory.*`) | Default | Purpose |
 |---|---|---|
 | `enabled` | `true` | Turns the whole layer on or off |
 | `track_files` | `true` | Snapshot the project before and after each call to record that call's file changes |
 | `file_budget_ms` | `2000` | Time limit for each snapshot or diff; past it the turn is still recorded with `files: "unavailable"` |
+| `default_budget_tokens` | `1200` | Block size limit for a model without its own `memory_budget_tokens` |
+| `min_task_chars` | `20` | Shorter tasks get no block |
+| `max_pages` | `5` | Most related notes/turns in one block |
+| `l0_tokens` / `l1_tokens` | `300` / `400` | Caps for the handoff/previous-error layer and the session-turns layer |
+| `recent_turns_verbatim` | `3` | Newest unseen turns shown with task and reply; older ones get one line |
+
+Each model entry in `engines.*.models` also has `memory_budget_tokens`: 800 for the free Vibe, OpenCode and Muse models, 2000 for Codex and Claude. Tokens are estimated as characters divided by 4.
 
 ### Live Quota Status Check
 ```bash

@@ -184,7 +184,8 @@ export function writePage(repoDir, projectKey, { slug, body, base = null, sessio
     const currentSha = view.blobSha(file);
     const current = currentSha ? parseFrontMatter(view.read(file)) : null;
     const version = current ? Number(current.meta.version || 1) : 0;
-    const meta = { version: version + 1, session, cwd, updated: new Date().toISOString() };
+    // seq lets a resumed engine session skip pages it has already been shown.
+    const meta = { version: version + 1, seq: view.seq, session, cwd, updated: new Date().toISOString() };
     if (current) meta.supersedes = base || currentSha;
     if (current && base && base !== currentSha) {
       meta.conflict_with = currentSha;

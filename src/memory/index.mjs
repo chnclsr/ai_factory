@@ -10,6 +10,8 @@ import { newSessionId, isValidSid, recordTurnCommit, findSession, readMeta } fro
 import { snapshotProject } from './store.mjs';
 import { migrateRegistry } from './migrate.mjs';
 import { SCOPES } from './search.mjs';
+import { buildPack, buildPrompt as buildPackedPrompt, PACK_DEFAULTS } from './pack.mjs';
+import path from 'node:path';
 
 export const LOG_PREFIX = '[AI Factory Memory]';
 
@@ -21,6 +23,8 @@ export const DEFAULT_MEMORY_CONFIG = Object.freeze({
 
 export function createMemory({ repoDir, dataDir, memoryConfig = {}, routerConfig = {}, env = process.env, log = console.warn }) {
   const settings = { ...DEFAULT_MEMORY_CONFIG, ...memoryConfig };
+  const packSettings = Object.fromEntries(Object.keys(PACK_DEFAULTS)
+    .map(k => [k, Number.isFinite(settings[k]) ? settings[k] : PACK_DEFAULTS[k]]));
   const warn = message => { try { log(`${LOG_PREFIX} ${message}`); } catch {} };
   const guard = (label, fallback, fn) => {
     try { return fn(); } catch (err) {
@@ -78,8 +82,24 @@ export function createMemory({ repoDir, dataDir, memoryConfig = {}, routerConfig
     });
   }
 
-  function buildPrompt(task) {
-    return task;
+  // request: { ctx, engine, model, engineSessionId, attemptIndex, errors } from the attempts loop.
+  function buildPrompt(task, request = {}) {
+    const ctx = request.ctx;
+    if (!ctx || ctx.missing) return task;
+    const depth = Number.parseInt(env.AI_FACTORY_ROUTER_DEPTH || '0', 10);
+    if (Number.isSafeInteger(depth) && depth > 0) return task;
+    return guard('buildPrompt', task, () => {
+      const pack = buildPack({
+        repoDir, project: ctx.project, sid: ctx.sid, cwd: ctx.cwd, scope: ctx.scope, task,
+        engine: request.engine, model: request.model, engineSessionId: request.engineSessionId,
+        errors: request.attemptIndex > 0 ? request.errors : [], routerConfig, settings: packSettings,
+        cacheDir: dataDir ? path.join(dataDir, 'memory-cache') : null
+      });
+      // The turn line records what the engine that ran last was shown (source turn, seq, hash).
+      ctx.injected = pack.text ? pack.injected : [];
+      ctx.injectedPack = pack.text ? { hash: pack.hash, tokens: pack.tokens, budget: pack.budget, engine: request.engine } : null;
+      return buildPackedPrompt(task, pack);
+    });
   }
 
   function recordTurn(ctx, outcome) {

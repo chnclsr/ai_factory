@@ -46,9 +46,10 @@ export function collectPages(snapshot, { cwd = '', scope = 'repo' } = {}) {
   return pages;
 }
 
-export function collectTurns(snapshot, { cwd = '', scope = 'repo' } = {}) {
+// sessionLimit keeps the scan to the most recently updated sessions until the step 6 index exists.
+export function collectTurns(snapshot, { cwd = '', scope = 'repo', sessionLimit = Infinity } = {}) {
   const out = [];
-  for (const session of listSessions(snapshot)) {
+  for (const session of listSessions(snapshot).slice(0, sessionLimit)) {
     for (const turn of readTurns(snapshot, session.sid)) {
       if (turn.kind !== 'turn') continue;
       if (scope === 'dir' && !isInside(turn.cwd, cwd)) continue;

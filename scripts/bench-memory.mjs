@@ -62,11 +62,11 @@ export function buildFixture(repo, project = 'bench') {
       sessionIds.push(sid);
       let jsonl = '';
       for (let n = 1; n <= EVENTS_PER_SESSION; n++) {
-        jsonl += JSON.stringify({ n, ts: new Date(0).toISOString(), engine: 'vibe', model: 'vibe-glm-5.3-flash', ok: true,
+        jsonl += JSON.stringify({ kind: 'turn', n, seq: 1, ts: new Date(0).toISOString(), engine: 'vibe', model: 'vibe-glm-5.3-flash', ok: true,
           task: words(20, s * 100 + n), response_head: words(120, s + n), files: [{ path: `src/f${n}.mjs`, status: 'M', add: 3, del: 1 }] }) + '\n';
       }
       view.writeRaw(`sessions/${sid}.jsonl`, jsonl);
-      view.writeRaw(`sessions/${sid}.meta.json`, JSON.stringify({ sid, engine_sessions: {}, last_injected_seq: {} }));
+      view.writeRaw(`sessions/${sid}.meta.json`, JSON.stringify({ sid, updated: new Date(s * 1000).toISOString(), engine_sessions: {}, last_injected_seq: {} }));
     }
     for (let p = 0; p < PAGES; p++) {
       view.writeRaw(`pages/page-${String(p).padStart(4, '0')}.md`, `---\nversion: 1\n---\n# Page ${p}\n${words(200, p)}\n`);

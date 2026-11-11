@@ -36,6 +36,7 @@ Every completed router invocation prints an `[AI FACTORY EXECUTION REPORT]` with
 | `session.mjs` | Turn log (`sessions/<sid>.jsonl`), session meta, per-project aliases (`session-aliases.json`) |
 | `migrate.mjs` | One-time move of `session_registry.json` into per-project sessions (`legacy-<name>`), then renames it `.migrated` |
 | `search.mjs` | Scoped term search over pages and turns: `repo`, `dir` (by recorded cwd), `mine` (the separate `refs/heads/personal` ref) |
+| `pack.mjs` | Builds the `<retrieved-memory untrusted="true">` block: delta since the engine session's last known Seq, layers L0 (earlier error) → L1 (unseen session turns with file changes) → L2 (related notes and other sessions' turns), per-model token budget, a 20-character task gate, and a content-addressed cache in `DATA_DIR/memory-cache/` |
 | `index.mjs` | The facade the router calls; every method catches its own errors and logs `[AI Factory Memory] …` |
 | `cli.mjs` | `node router.mjs memory …` inspection and revert commands |
 
