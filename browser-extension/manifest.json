@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AI Factory model picker",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Actor and critic pickers above Antigravity's prompt box; the choice is added to the prompt on send.",
   "content_scripts": [
     {

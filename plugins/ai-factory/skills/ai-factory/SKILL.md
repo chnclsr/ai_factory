@@ -1,10 +1,11 @@
 ---
 name: ai-factory
-description: Delegate repository analysis, large reads, coding and refactoring through the local AI Factory router.
+description: Delegate work through the local AI Factory router, only when the user's message starts with "[AI Factory]" or explicitly asks for the router or a named engine/model. Never use it otherwise.
 ---
 
 # AI Factory
-Run {{ROUTER_COMMAND}} --task "<request>" --cwd "<working directory>".
+Use this skill only when the user's message starts with "[AI Factory]" (not "[AI Factory off]") or explicitly asks for the router or a named engine/model. Without that, do the task yourself.
+When allowed, run {{ROUTER_COMMAND}} --task "<request>" --cwd "<working directory>".
 
 Options:
 - Default: free fallback chain `deepseek-v4.1-flash-free` → `mimo-v2.6-flash-free` → `glm-5.3-flash-free` (OpenCode, free) → Muse `muse-spark-1.3-contributor` → Codex `gpt-6-luna`.

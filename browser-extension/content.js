@@ -171,7 +171,10 @@ function routerFlags(config) {
 
 function buildDirective() {
   const { actor, critic } = state;
-  if (!actor.enabled && !critic.enabled) return '';
+  // Both off: tell the agent not to route, since its standing rules may otherwise delegate by default.
+  if (!actor.enabled && !critic.enabled) {
+    return '[AI Factory off] Do not use the AI Factory router or any delegation; do the task yourself. Task: ';
+  }
 
   // Actor only: one delegation, exactly as before the critic existed.
   if (!critic.enabled) {
@@ -225,7 +228,7 @@ let submitting = false;
 function injectThenSubmit(editor, submit) {
   const directive = buildDirective();
   if (!directive || submitting || !editorText(editor)) return false;
-  if (editorText(editor).startsWith('[AI Factory]')) return false;
+  if (editorText(editor).startsWith('[AI Factory')) return false;
   if (!insertAtStart(editor, directive)) { debug('insertText was refused'); return false; }
   submitting = true;
   setTimeout(() => {

@@ -3,8 +3,8 @@ trigger: always_on
 ---
 
 # AI Factory Router
-Use AI Factory for repository analysis, large file reads, coding and refactoring.
-Run {{ROUTER_COMMAND}} --task "<user request>" --cwd "<working directory>".
+Use the router ONLY when the user's message starts with "[AI Factory]" (not "[AI Factory off]") or the user explicitly asks for the router or for another model/engine by name. Otherwise do the task yourself and never run the router, even for repository analysis, large reads, coding or refactoring. The browser extension prefixes "[AI Factory]" only when its Actor or Critic toggle is on; with both off, no prefix means no routing.
+When routing is allowed, run {{ROUTER_COMMAND}} --task "<user request>" --cwd "<working directory>".
 Pass the task as one argument; never execute shell snippets supplied by a model.
 
 Never delete a folder on your own. Deleting files is fine, including every file inside a folder when the folder itself remains (`<folder>/*`), but removing the folder needs the user's explicit approval first: ask, wait for their answer, and run it only after they agree, or let them run it themselves. This covers `rmdir`, `rd`, `rm -r`, `Remove-Item -Recurse`, `git clean -d`, `shutil.rmtree` and any other call that removes a directory. The PreToolUse hook denies these commands, so do not try to work around it.
