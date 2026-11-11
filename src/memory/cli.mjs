@@ -21,6 +21,7 @@ import { resolveProject, findGitRepo, UNSCOPED_PROJECT } from './project.mjs';
 import { snapshotProject, commitProject, writePage } from './store.mjs';
 import { findSession, listSessions, readTurns, readMeta, sessionPaths, ALIASES_FILE } from './session.mjs';
 import { searchWithInfo, SCOPES } from './search.mjs';
+import { vectorSettings } from './vector.mjs';
 import { beginHandoff, claimHandoff, listHandoffs, isValidHandoffId } from './handoff.mjs';
 import { revertPatch } from './worktree.mjs';
 import { followMoves, describeProjects, renameProject, mergeProjects } from './projects.mjs';
@@ -191,7 +192,8 @@ export async function runMemoryCli(argv, { repoDir, indexFile = null, configFile
     const query = positional.slice(1).join(' ');
     const scope = flags.scope || 'repo';
     if (!SCOPES.includes(scope)) { io.err(`Unknown scope: ${scope} (use ${SCOPES.join(', ')})\n`); return 1; }
-    const index = indexFile && readMemoryConfig(configFile).index !== false ? { file: indexFile } : null;
+    const memoryConfig = readMemoryConfig(configFile);
+    const index = indexFile && memoryConfig.index !== false ? { file: indexFile, vector: vectorSettings(memoryConfig.vector) } : null;
     let hits;
     try {
       ({ items: hits } = searchWithInfo(repoDir, { projectKey: project.key, query, scope, cwd: workdir, limit: Number(flags.limit) || 10,

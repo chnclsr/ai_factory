@@ -290,7 +290,10 @@
     "l0_tokens": 300,
     "l1_tokens": 400,
     "recent_turns_verbatim": 3,
-    "index": true
+    "index": true,
+    "vector": {
+      "enabled": false
+    }
   },
   "watchdog": {
     "initial_timeout_ms": 30000,

@@ -14,7 +14,31 @@ import { snapshotRef, parseFrontMatter } from './store.mjs';
 import { PERSONAL_REF, projectRef } from './project.mjs';
 import { listSessions, readTurns } from './session.mjs';
 import { listRefs } from './gitobj.mjs';
-import { openIndex, syncRef, syncAll, liveProjectRefs, queryDocs } from './fts.mjs';
+import { openIndex, syncRef, syncAll, liveProjectRefs, queryDocs, docsByIds } from './fts.mjs';
+import { attachVectors, vectorSearch, spliceChunks } from './vector.mjs';
+
+// Score fusion: fts_weight × (bm25 relative to the best FTS hit) + the rest × the document's best
+// chunk similarity. Rank fusion was tried first and dropped: the hashed vectors score templated
+// near-duplicates almost alike, and giving that list equal say pushed exact keyword hits out of the
+// top five. Each document carries its vector-hit chunks, for ChunkSplice.
+function fuse(idx, ftsDocs, chunkHits, ftsWeight) {
+  const score = new Map();
+  const chunksByDoc = new Map();
+  const best = ftsDocs.length ? ftsDocs[0].rank : 0;
+  for (const doc of ftsDocs) score.set(doc.id, best < 0 ? ftsWeight * (doc.rank / best) : 0);
+  for (const hit of chunkHits) {
+    if (!chunksByDoc.has(hit.doc)) {
+      chunksByDoc.set(hit.doc, []);
+      score.set(hit.doc, (score.get(hit.doc) || 0) + (1 - ftsWeight) * Math.max(0, hit.score));
+    }
+    chunksByDoc.get(hit.doc).push(hit);
+  }
+  const known = new Map(ftsDocs.map(doc => [doc.id, doc]));
+  const missing = [...chunksByDoc.keys()].filter(id => !known.has(id));
+  for (const doc of docsByIds(idx, missing)) known.set(doc.id, doc);
+  return [...score.entries()].sort((a, b) => b[1] - a[1]).map(([id]) => known.get(id)).filter(Boolean)
+    .map(doc => ({ ...doc, chunkHits: chunksByDoc.get(doc.id) || [] }));
+}
 
 export const SCOPES = ['repo', 'dir', 'mine'];
 
@@ -67,11 +91,14 @@ export function collectTurns(snapshot, { cwd = '', scope = 'repo', sessionLimit 
 
 const refKey = ref => (ref.startsWith('refs/heads/p/') ? ref.slice('refs/heads/p/'.length) : ref === PERSONAL_REF ? 'personal' : ref);
 
-// Index documents in the shape the scan produces, so callers handle one kind of item.
+// Index documents in the shape the scan produces, so callers handle one kind of item. With vector
+// hits, `excerpt` holds the spliced spans of the document that matched (ChunkSplice).
 export function docToItem(doc) {
+  const spans = doc.chunkHits?.length ? spliceChunks(doc.body, doc.chunkHits) : null;
+  const excerpt = spans ? spans.sort((a, b) => b.score - a.score).map(s => s.text.trim()).join(' … ') : null;
   if (doc.kind === 'page') {
     return { kind: 'page', id: doc.doc_id, slug: doc.data.slug, meta: doc.data.meta || {}, text: doc.body, project: refKey(doc.ref),
-      docRow: doc.id, seq: doc.seq };
+      docRow: doc.id, seq: doc.seq, excerpt };
   }
   const turn = { ...doc.data, n: doc.n, seq: doc.seq, cwd: doc.cwd, ts: doc.ts, kind: 'turn' };
   return { kind: 'turn', id: doc.doc_id, sid: doc.sid, turn, text: `${turn.task || ''}\n${turn.response_head || ''}`,
@@ -80,9 +107,11 @@ export function docToItem(doc) {
 
 // Ranked index documents for one search. `filter(doc)` drops documents before the limit applies.
 // Returns null when node:sqlite is unavailable, so the caller falls back to the scan.
-export function indexSearch({ repoDir, file, projectKey, queryTerms, scope = 'repo', cwd = '', global = false, limit = 10, filter = null }) {
+// `vector` (vectorSettings) adds chunk vectors fused with FTS by reciprocal rank.
+export function indexSearch({ repoDir, file, projectKey, query = '', queryTerms, scope = 'repo', cwd = '', global = false, limit = 10, filter = null, vector = null }) {
   const idx = openIndex(file);
   if (!idx) return null;
+  if (vector?.enabled) attachVectors(idx, vector);
   let refs;
   if (scope === 'mine') {
     syncRef(idx, repoDir, PERSONAL_REF);
@@ -94,7 +123,10 @@ export function indexSearch({ repoDir, file, projectKey, queryTerms, scope = 're
     refs = [projectRef(projectKey)];
     syncRef(idx, repoDir, refs[0]);
   }
-  const fetched = queryDocs(idx, { refs, queryTerms, limit: Math.max(limit * 8, 40) });
+  let fetched = queryDocs(idx, { refs, queryTerms, limit: Math.max(limit * 8, 40) });
+  if (vector?.enabled && idx.vector && query) {
+    fetched = fuse(idx, fetched, vectorSearch(idx, { refs, query, k: Math.max(limit * 8, 40) }), vector.fts_weight);
+  }
   const items = [];
   for (const doc of fetched) {
     if (scope === 'dir' && !isInside(doc.cwd, cwd)) continue;
@@ -102,7 +134,7 @@ export function indexSearch({ repoDir, file, projectKey, queryTerms, scope = 're
     items.push(docToItem(doc));
     if (items.length >= limit) break;
   }
-  items.backend = 'fts';
+  items.backend = vector?.enabled ? 'fts+vector' : 'fts';
   return items;
 }
 
@@ -125,7 +157,7 @@ function scanSearch(repoDir, { projectKey, queryTerms, scope, cwd, global }) {
 }
 
 // Returns ranked items [{ kind, id, text, project, ... }] and which backend answered.
-//   options.index   { file } — use the derived index (falls back to the scan on error)
+//   options.index   { file, vector } — use the derived index (falls back to the scan on error)
 //   options.global  search every live project ref
 export function searchWithInfo(repoDir, { projectKey, query, scope = 'repo', cwd = '', limit = 10, index = null, global = false, onError = null }) {
   if (!SCOPES.includes(scope)) throw new Error(`unknown scope: ${scope}`);
@@ -133,7 +165,7 @@ export function searchWithInfo(repoDir, { projectKey, query, scope = 'repo', cwd
   const queryTerms = terms(query);
   if (index?.file) {
     try {
-      const items = indexSearch({ repoDir, file: index.file, projectKey, queryTerms, scope, cwd, global, limit });
+      const items = indexSearch({ repoDir, file: index.file, vector: index.vector, projectKey, query, queryTerms, scope, cwd, global, limit });
       if (items) return { items, backend: items.backend || 'fts' };
     } catch (err) {
       onError?.(err);

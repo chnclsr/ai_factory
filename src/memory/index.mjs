@@ -12,6 +12,7 @@ import { snapshotProject } from './store.mjs';
 import { migrateRegistry } from './migrate.mjs';
 import { SCOPES } from './search.mjs';
 import { buildPack, buildPrompt as buildPackedPrompt, PACK_DEFAULTS } from './pack.mjs';
+import { vectorSettings } from './vector.mjs';
 import { newHandoffId, writeHandoff, acceptInView } from './handoff.mjs';
 import path from 'node:path';
 
@@ -28,6 +29,7 @@ export function createMemory({ repoDir, dataDir, indexFile = null, memoryConfig 
   const settings = { ...DEFAULT_MEMORY_CONFIG, ...memoryConfig };
   const packSettings = Object.fromEntries(Object.keys(PACK_DEFAULTS)
     .map(k => [k, Number.isFinite(settings[k]) ? settings[k] : PACK_DEFAULTS[k]]));
+  const vector = vectorSettings(settings.vector);
   const warn = message => { try { log(`${LOG_PREFIX} ${message}`); } catch {} };
   const guard = (label, fallback, fn) => {
     try { return fn(); } catch (err) {
@@ -99,6 +101,7 @@ export function createMemory({ repoDir, dataDir, indexFile = null, memoryConfig 
         errors: request.attemptIndex > 0 ? request.errors : [], routerConfig, settings: packSettings,
         cacheDir: dataDir ? path.join(dataDir, 'memory-cache') : null,
         indexFile: settings.index === false ? null : indexFile,
+        vector,
         onIndexError: err => warn(`index unavailable, scanning git objects instead: ${String(err?.message || err).split('\n')[0]}`)
       });
       // The turn line records what the engine that ran last was shown (source turn, seq, hash).

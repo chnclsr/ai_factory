@@ -145,7 +145,7 @@ export function buildPack(req) {
   const queryTerms = terms(task);
 
   const key = shortHash(JSON.stringify([snapshot.sha, req.project.key, req.sid, req.engine, req.engineSessionId || 'new',
-    budget, knownSeq, req.scope || 'repo', req.cwd || '', queryTerms, errors, settings]));
+    budget, knownSeq, req.scope || 'repo', req.cwd || '', queryTerms, errors, settings, Boolean(req.indexFile), req.vector?.enabled ? req.vector : null]));
   const cached = readCache(req.cacheDir, key);
   if (cached) return { ...cached, cache: 'hit' };
 
@@ -204,7 +204,8 @@ export function buildPack(req) {
     const scope = req.scope || 'repo';
     const pageCandidate = page => {
       const pageSeq = Number(page.meta?.seq ?? page.seq ?? 0);
-      return { text: page.text, line: `- note ${page.slug}: ${clip(page.text, 400)}`,
+      // With vectors on, the excerpt is the part of the note that matched (ChunkSplice).
+      return { text: page.text, line: `- note ${page.slug}: ${clip(page.excerpt || page.text, 400)}`,
         source: { kind: 'page', id: page.id, seq: pageSeq, hash: shortHash(page.text) } };
     };
     const turnCandidate = item => {
@@ -216,7 +217,7 @@ export function buildPack(req) {
     let ranked = null;
     if (req.indexFile) {
       try {
-        const items = indexSearch({ repoDir: req.repoDir, file: req.indexFile, projectKey: req.project.key, queryTerms, scope,
+        const items = indexSearch({ repoDir: req.repoDir, file: req.indexFile, vector: req.vector, query: task, projectKey: req.project.key, queryTerms, scope,
           cwd: req.cwd, limit: settings.max_pages,
           filter: doc => (doc.kind === 'page' ? !(knownSeq > 0 && doc.seq <= knownSeq) : doc.sid !== req.sid && doc.seq > knownSeq) });
         if (items) ranked = items.map(item => (item.kind === 'page' ? pageCandidate(item) : turnCandidate(item)));

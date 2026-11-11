@@ -13,7 +13,7 @@ import { readRef, listRefs } from './gitobj.mjs';
 import { snapshotRef, parseFrontMatter } from './store.mjs';
 import { PERSONAL_REF } from './project.mjs';
 
-const SCHEMA_VERSION = '2';
+const SCHEMA_VERSION = '3';
 const MAX_BODY_CHARS = 32768;
 
 let sqlite;
@@ -48,9 +48,10 @@ CREATE INDEX IF NOT EXISTS docs_ref_doc ON docs(ref, doc_id);
 CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(body, refkey, tokenize = 'porter unicode61 remove_diacritics 2');
 CREATE TABLE IF NOT EXISTS chunks(
   id INTEGER PRIMARY KEY, doc INTEGER NOT NULL, ref TEXT NOT NULL, ord INTEGER NOT NULL, start INTEGER, end INTEGER,
-  key TEXT NOT NULL, provider TEXT, model TEXT, dim INTEGER, vec BLOB, neighbors TEXT);
+  key TEXT NOT NULL, provider TEXT, model TEXT, dim INTEGER, vec BLOB, list INTEGER);
+CREATE TABLE IF NOT EXISTS centroids(ref TEXT NOT NULL, cid INTEGER NOT NULL, vec BLOB NOT NULL, PRIMARY KEY(ref, cid));
 CREATE INDEX IF NOT EXISTS chunks_doc ON chunks(doc);
-CREATE INDEX IF NOT EXISTS chunks_ref ON chunks(ref);
+CREATE INDEX IF NOT EXISTS chunks_ref ON chunks(ref, list);
 `;
 
 // Opens (and caches per process) the index at `file`. Returns null when node:sqlite is missing.
@@ -204,6 +205,9 @@ export function syncRef(idx, repoDir, ref) {
         files++;
       }
       stmt(idx, 'INSERT OR REPLACE INTO refs(ref, sha, seq, moved_to) VALUES (?,?,?,?)').run(ref, sha, snapshot.seq, movedTo);
+      for (const hook of idx.hooks) hook.afterSync?.(idx, ref);
+      // Documents changed without the vector layer attached: its chunks are stale until rebuilt.
+      if (files && !idx.hooks.some(hook => hook.vectors)) stmt(idx, "DELETE FROM meta WHERE key = 'vector_model'").run();
     }
     idx.db.exec('COMMIT');
   } catch (err) {

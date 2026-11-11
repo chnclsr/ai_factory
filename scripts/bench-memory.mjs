@@ -97,18 +97,86 @@ function measureFsFloor(dir, rounds = 200) {
 }
 
 // recall@5 on the canary eval set (src/memory/eval-fixture.mjs) with 2000 distractors.
+// FTS alone and FTS fused with vectors (step 8) answer the same queries from separate index files.
 async function evalRecall(dir) {
   const { writeEvalProject, recallAt } = await import('../src/memory/eval-fixture.mjs');
   const { search } = await import('../src/memory/search.mjs');
+  const { vectorSettings } = await import('../src/memory/vector.mjs');
   const repo = path.join(dir, 'eval.git');
-  const file = path.join(dir, 'eval-index.sqlite');
   const cases = writeEvalProject(repo, 'eval', { distractors: 2000 });
-  const rank = query => search(repo, { projectKey: 'eval', query, index: { file }, limit: 5 }).map(i => i.id);
   const out = {};
-  for (const set of ['lexical', 'inflected']) {
-    const { recall, hits, total } = recallAt(cases.filter(c => c.set === set), rank);
-    out[set] = { recall, hits, total };
+  for (const [mode, vector] of [['fts', null], ['fts+vector', vectorSettings({ enabled: true })]]) {
+    const file = path.join(dir, `eval-${mode.replace('+', '-')}.sqlite`);
+    const rank = query => search(repo, { projectKey: 'eval', query, index: { file, vector }, limit: 5 }).map(i => i.id);
+    for (const set of ['lexical', 'inflected']) {
+      const { recall, hits, total } = recallAt(cases.filter(c => c.set === set), rank);
+      out[`${set} (${mode})`] = { recall, hits, total, set, mode };
+    }
   }
+  return out;
+}
+
+// Step 8 cost on the bench fixture: building every chunk vector and the graph, an incremental
+// sync with vectors on, graph recall against brute force, and the pack with vectors on.
+async function benchVectors({ repo, dir, sessionIds, packModule }) {
+  const { openIndex, syncRef, closeIndex } = await import('../src/memory/fts.mjs');
+  const { vectorSettings, attachVectors, annRecall, vectorSearch } = await import('../src/memory/vector.mjs');
+  const file = path.join(dir, 'memory-index.sqlite');
+  const idx = openIndex(file);
+  const vector = vectorSettings({ enabled: true });
+  let start = process.hrtime.bigint();
+  attachVectors(idx, vector);
+  const out = { buildMs: Math.round(Number(process.hrtime.bigint() - start) / 1e6) };
+  out.chunks = idx.db.prepare('SELECT count(*) AS n FROM chunks').get().n;
+  commitProject(repo, 'bench', { subject: 'vector probe', trailers: { Kind: 'turn' } }, view => {
+    view.appendLine(`sessions/${sessionIds[1]}.jsonl`, JSON.stringify({ kind: 'turn', n: 9998, seq: view.seq, task: 'incremental vector probe', response_head: 'ok' }));
+  });
+  start = process.hrtime.bigint();
+  syncRef(idx, repo, 'refs/heads/p/bench');
+  out.incrementalMs = +(Number(process.hrtime.bigint() - start) / 1e6).toFixed(2);
+  const routerConfig = { engines: { vibe: { models: { m: { memory_budget_tokens: 800 } } } } };
+  const samples = [];
+  for (let i = 0; i < 30; i++) {
+    packModule.clearPackMemo();
+    const t0 = process.hrtime.bigint();
+    packModule.buildPack({ repoDir: repo, project: { key: 'bench' }, sid: sessionIds[i], cwd: '', scope: 'repo', indexFile: file, vector,
+      task: `Refactor the router fallback and session handling, case ${i}`, engine: 'vibe', model: 'm', routerConfig, cacheDir: null });
+    samples.push(Number(process.hrtime.bigint() - t0) / 1e6);
+  }
+  out.coldPackP95Ms = +p95(samples).toFixed(2);
+  closeIndex(file);
+  out.ann = annBench({ dir, openIndex, closeIndex, syncRef, vectorSettings, attachVectors, annRecall, vectorSearch });
+  return out;
+}
+
+// ANN quality is measured on 20k documents over a 5000-word random vocabulary. The main fixture is
+// built from 20 words, so all of its vectors are near-identical and no approximate index can rank
+// them; it would measure the fixture, not the index.
+function annBench({ dir, openIndex, closeIndex, syncRef, vectorSettings, attachVectors, annRecall, vectorSearch }) {
+  let seed = 42;
+  const rand = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+  const syllables = ['ka', 'lo', 'mi', 'ne', 'ru', 'sa', 'ti', 'vo', 'ze', 'pa', 'qu', 'ber', 'don', 'fel', 'gar', 'hin'];
+  const vocab = Array.from({ length: 5000 }, () => Array.from({ length: 2 + Math.floor(rand() * 3) }, () => syllables[Math.floor(rand() * syllables.length)]).join(''));
+  const word = () => vocab[Math.floor(Math.pow(rand(), 1.5) * vocab.length)];
+  const docs = Array.from({ length: 20000 }, () => Array.from({ length: 20 + Math.floor(rand() * 40) }, word).join(' '));
+  const repo = path.join(dir, 'ann.git');
+  commitProject(repo, 'ann', { subject: 'ann corpus', trailers: { Kind: 'fixture' } }, view => {
+    docs.forEach((text, i) => view.writeRaw(`pages/d${i}.md`, `---\nversion: 1\nseq: 1\n---\n${text}\n`));
+  });
+  const queries = Array.from({ length: 50 }, () => { const words = docs[Math.floor(rand() * docs.length)].split(' '); return words.slice(0, 6).join(' '); });
+  const file = path.join(dir, 'ann.sqlite');
+  const idx = openIndex(file);
+  syncRef(idx, repo, 'refs/heads/p/ann');
+  let start = process.hrtime.bigint();
+  attachVectors(idx, vectorSettings({ enabled: true }));
+  const out = { chunks: idx.db.prepare('SELECT count(*) AS n FROM chunks').get().n, buildMs: Math.round(Number(process.hrtime.bigint() - start) / 1e6) };
+  out.recallAt10 = +annRecall(idx, { ref: 'refs/heads/p/ann', queries, k: 10 }).toFixed(3);
+  const timeQueries = () => queries.map(q => { const t0 = process.hrtime.bigint(); vectorSearch(idx, { refs: ['refs/heads/p/ann'], query: q, k: 40 }); return Number(process.hrtime.bigint() - t0) / 1e6; });
+  out.queryP95Ms = +p95(timeQueries()).toFixed(2);
+  // Brute force for comparison: the same queries with the IVF lists dropped.
+  idx.db.exec("DELETE FROM meta WHERE key = 'ivf:refs/heads/p/ann'");
+  out.bruteForceP95Ms = +p95(timeQueries()).toFixed(2);
+  closeIndex(file);
   return out;
 }
 
@@ -161,6 +229,7 @@ export async function runBench({ quiet = false } = {}) {
       results.pack = 'not built yet (step 4)';
     }
     if (idx) {
+      if (packModule?.buildPack) results.vector = await benchVectors({ repo, dir, sessionIds, packModule });
       closeIndex(indexFile);
       results.recall = await evalRecall(dir);
     }
@@ -174,7 +243,9 @@ export async function runBench({ quiet = false } = {}) {
   if (results.readPathGitProcesses !== undefined && results.readPathGitProcesses > 0) failures.push(`read path spawned ${results.readPathGitProcesses} processes`);
   if (results.noChangeResumeTokens !== undefined && results.noChangeResumeTokens > 0) failures.push(`no-change resume injected ${results.noChangeResumeTokens} tokens`);
   if (results.overBudget) failures.push(`pack exceeded budget ${results.overBudget} times`);
-  if (results.recall && results.recall.lexical.recall < TARGETS.recallAt5) failures.push(`recall@5 ${results.recall.lexical.recall} < ${TARGETS.recallAt5}`);
+  for (const r of Object.values(results.recall || {})) {
+    if (r.set === 'lexical' && r.recall < TARGETS.recallAt5) failures.push(`recall@5 (${r.mode}) ${r.recall} < ${TARGETS.recallAt5}`);
+  }
   results.failures = failures;
   if (!quiet) {
     if (process.argv.includes('--json')) console.log(JSON.stringify(results, null, 2));
@@ -187,7 +258,9 @@ export async function runBench({ quiet = false } = {}) {
       if (results.noChangeResumeTokens !== undefined) console.log(`no-change resume tokens: ${results.noChangeResumeTokens}`);
       if (results.maxTokensOverBudget !== undefined) console.log(`max pack tokens / budget: ${results.maxTokensOverBudget}`);
       if (results.indexBuild) console.log(`index build  full ${results.indexBuild.fullMs} ms   incremental ${results.indexBuild.incrementalMs} ms   (pack L2 backend: ${results.packBackend})`);
-      if (results.recall) for (const [set, r] of Object.entries(results.recall)) console.log(`recall@5     ${set.padEnd(10)} ${r.recall} (${r.hits}/${r.total})${set === 'lexical' ? `   (target >= ${TARGETS.recallAt5})` : '   (informational)'}`);
+      if (results.vector) console.log(`vectors      build ${results.vector.buildMs} ms for ${results.vector.chunks} chunks   incremental ${results.vector.incrementalMs} ms   pack cold p95 ${results.vector.coldPackP95Ms} ms`);
+      if (results.vector?.ann) console.log(`ivf          ${results.vector.ann.chunks} chunks: build ${results.vector.ann.buildMs} ms   recall@10 vs brute force ${results.vector.ann.recallAt10}   query p95 ${results.vector.ann.queryP95Ms} ms (brute force ${results.vector.ann.bruteForceP95Ms} ms)`);
+      if (results.recall) for (const [name, r] of Object.entries(results.recall)) console.log(`recall@5     ${name.padEnd(24)} ${r.recall} (${r.hits}/${r.total})${r.set === 'lexical' ? `   (target >= ${TARGETS.recallAt5})` : '   (informational)'}`);
       if (typeof results.pack === 'string') console.log(`pack: ${results.pack}`);
       console.log(failures.length ? 'FAIL\n  ' + failures.join('\n  ') : 'PASS');
     }
