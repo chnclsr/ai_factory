@@ -35,8 +35,9 @@ Every completed router invocation prints an `[AI FACTORY EXECUTION REPORT]` with
 | `worktree.mjs` | Before/after snapshots of the user's project via a temporary `GIT_INDEX_FILE`; the diff between them is the turn's own change |
 | `session.mjs` | Turn log (`sessions/<sid>.jsonl`), session meta, per-project aliases (`session-aliases.json`) |
 | `migrate.mjs` | One-time move of `session_registry.json` into per-project sessions (`legacy-<name>`), then renames it `.migrated` |
-| `search.mjs` | Scoped term search over pages and turns: `repo`, `dir` (by recorded cwd), `mine` (the separate `refs/heads/personal` ref) |
-| `pack.mjs` | Builds the `<retrieved-memory untrusted="true">` block: delta since the engine session's last known Seq, layers L0 (earlier error) → L1 (unseen session turns with file changes) → L2 (related notes and other sessions' turns), per-model token budget, a 20-character task gate, and a content-addressed cache in `DATA_DIR/memory-cache/` |
+| `fts.mjs` | Derived SQLite index (`DATA_DIR/memory-index.sqlite`, `node:sqlite`): FTS5 over turns and pages, synced per ref by comparing blob shas of `sessions/*.jsonl` and `pages/*.md`, so an unchanged ref costs one row lookup and an appended turn adds one row. Safe to delete |
+| `search.mjs` | Scoped search over pages and turns: `repo`, `dir` (by recorded cwd), `mine` (the separate `refs/heads/personal` ref), and `--global` across live projects. Ranks with the index and falls back to a term scan over git objects when the index is unavailable |
+| `pack.mjs` | Builds the `<retrieved-memory untrusted="true">` block: delta since the engine session's last known Seq, layers L0 (earlier error) → L1 (unseen session turns with file changes) → L2 (related notes and other sessions' turns, ranked by the index), per-model token budget, a 20-character task gate, and a content-addressed cache in `DATA_DIR/memory-cache/` |
 | `handoff.mjs` | `handoffs/<hid>.md` state machine (`open → accepted`); automatic handoffs ride in the turn's commit, `claimHandoff` flips the state under the ref lock so exactly one taker wins; contributes open handoffs to L0 |
 | `hook.mjs` | Read-only lookup the plugin hook imports with a 50 ms deadline to show open handoffs for the session's project |
 | `index.mjs` | The facade the router calls; every method catches its own errors and logs `[AI Factory Memory] …` |

@@ -19,10 +19,11 @@ export const LOG_PREFIX = '[AI Factory Memory]';
 export const DEFAULT_MEMORY_CONFIG = Object.freeze({
   enabled: false,
   track_files: true,
-  file_budget_ms: 2000
+  file_budget_ms: 2000,
+  index: true
 });
 
-export function createMemory({ repoDir, dataDir, memoryConfig = {}, routerConfig = {}, env = process.env, log = console.warn }) {
+export function createMemory({ repoDir, dataDir, indexFile = null, memoryConfig = {}, routerConfig = {}, env = process.env, log = console.warn }) {
   const settings = { ...DEFAULT_MEMORY_CONFIG, ...memoryConfig };
   const packSettings = Object.fromEntries(Object.keys(PACK_DEFAULTS)
     .map(k => [k, Number.isFinite(settings[k]) ? settings[k] : PACK_DEFAULTS[k]]));
@@ -94,7 +95,9 @@ export function createMemory({ repoDir, dataDir, memoryConfig = {}, routerConfig
         repoDir, project: ctx.project, sid: ctx.sid, cwd: ctx.cwd, scope: ctx.scope, task,
         engine: request.engine, model: request.model, engineSessionId: request.engineSessionId,
         errors: request.attemptIndex > 0 ? request.errors : [], routerConfig, settings: packSettings,
-        cacheDir: dataDir ? path.join(dataDir, 'memory-cache') : null
+        cacheDir: dataDir ? path.join(dataDir, 'memory-cache') : null,
+        indexFile: settings.index === false ? null : indexFile,
+        onIndexError: err => warn(`index unavailable, scanning git objects instead: ${String(err?.message || err).split('\n')[0]}`)
       });
       // The turn line records what the engine that ran last was shown (source turn, seq, hash).
       ctx.injected = pack.text ? pack.injected : [];
@@ -132,5 +135,5 @@ export function createMemory({ repoDir, dataDir, memoryConfig = {}, routerConfig
     });
   }
 
-  return { settings, resolveSession, buildPrompt, recordTurn, repoDir, dataDir };
+  return { settings, resolveSession, buildPrompt, recordTurn, repoDir, dataDir, indexFile };
 }

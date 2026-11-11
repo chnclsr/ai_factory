@@ -258,9 +258,10 @@ Sessions and projects:
 node router.mjs memory note add "Deploys go through staging first" --cwd <project>
 node router.mjs memory note add "I prefer small commits" --scope mine
 node router.mjs memory search deploy --scope dir --cwd <project>/services/api
+node router.mjs memory search deploy --global
 ```
 
-`--scope repo` (default) searches the project; `dir` keeps only turns and notes recorded under that directory; `mine` reads only your personal notes, which never appear in project results. Secrets (`sk-…`, `ghp_…`, Telegram bot tokens, `Bearer` values, `.env` style `*_KEY=` assignments) are masked before anything is written. Design and status: [docs/memory-plan.md](docs/memory-plan.md).
+`--scope repo` (default) searches the project; `dir` keeps only turns and notes recorded under that directory; `mine` reads only your personal notes, which never appear in project results. `--global` searches every project (still never your personal notes) and prefixes each hit with its project. Search and the related-items part of the block use a full-text index at `.runtime/memory-index.sqlite` (SQLite FTS5 through `node:sqlite`, Node 22.13 or newer). The index is derived from the git repository and kept in step on each read; deleting it only costs a rebuild, and if it cannot be opened the router falls back to scanning the repository. Secrets (`sk-…`, `ghp_…`, Telegram bot tokens, `Bearer` values, `.env` style `*_KEY=` assignments) are masked before anything is written. Design and status: [docs/memory-plan.md](docs/memory-plan.md).
 
 Before each attempt the engine's task file starts with a `<retrieved-memory untrusted="true">` block, followed by your task unchanged. The block holds only what that engine conversation has not seen yet. A resumed conversation with nothing new gets no block at all. A new engine, or a fallback step, gets the session's earlier turns (task, start of the reply, changed files with `+/-` counts), the previous attempt's error, and up to five related notes or turns from other sessions. Tasks shorter than 20 characters get no block. Nested router calls (`AI_FACTORY_ROUTER_DEPTH > 0`) never get one. Memory is never written to `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` or any other file a harness loads on its own.
 
@@ -274,6 +275,7 @@ Before each attempt the engine's task file starts with a `<retrieved-memory untr
 | `max_pages` | `5` | Most related notes/turns in one block |
 | `l0_tokens` / `l1_tokens` | `300` / `400` | Caps for the handoff/previous-error layer and the session-turns layer |
 | `recent_turns_verbatim` | `3` | Newest unseen turns shown with task and reply; older ones get one line |
+| `index` | `true` | Use the SQLite full-text index for search and related items; `false` scans the git repository instead |
 
 Handoffs: when a call ends in a Gemini handoff, or every engine fails, memory writes an open handoff and the report gains a `handoff: <id>` line. The plugin hook shows open handoffs for the current project to Antigravity, inside the same untrusted block, together with the command that takes one. A router engine sees open handoffs addressed to it (or to `any`) in its block, and a successful call takes them. Taking a handoff succeeds exactly once, however many agents try at the same time.
 

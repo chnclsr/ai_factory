@@ -5,7 +5,7 @@
   "description": "Local AI task router, quota tracker and Gemini/Antigravity hooks",
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.13"
   },
   "scripts": {
     "setup": "node scripts/setup.mjs",

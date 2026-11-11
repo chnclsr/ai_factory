@@ -16,7 +16,7 @@ import { commitProject } from '../src/memory/store.mjs';
 const require = createRequire(import.meta.url);
 const childProcess = require('node:child_process');
 
-const TARGETS = { writeP95Ms: 15, warmPackP95Ms: 10, coldPackP95Ms: 40, readPathGitProcesses: 0, noChangeResumeTokens: 0 };
+const TARGETS = { writeP95Ms: 15, warmPackP95Ms: 10, coldPackP95Ms: 40, readPathGitProcesses: 0, noChangeResumeTokens: 0, recallAt5: 0.95 };
 const SESSIONS = 200;
 const EVENTS_PER_SESSION = 50;
 const PAGES = 1000;
@@ -96,6 +96,22 @@ function measureFsFloor(dir, rounds = 200) {
   return { p50Ms: +percentile(samples, 0.5).toFixed(2), p95Ms: +percentile(samples, 0.95).toFixed(2) };
 }
 
+// recall@5 on the canary eval set (src/memory/eval-fixture.mjs) with 2000 distractors.
+async function evalRecall(dir) {
+  const { writeEvalProject, recallAt } = await import('../src/memory/eval-fixture.mjs');
+  const { search } = await import('../src/memory/search.mjs');
+  const repo = path.join(dir, 'eval.git');
+  const file = path.join(dir, 'eval-index.sqlite');
+  const cases = writeEvalProject(repo, 'eval', { distractors: 2000 });
+  const rank = query => search(repo, { projectKey: 'eval', query, index: { file }, limit: 5 }).map(i => i.id);
+  const out = {};
+  for (const set of ['lexical', 'inflected']) {
+    const { recall, hits, total } = recallAt(cases.filter(c => c.set === set), rank);
+    out[set] = { recall, hits, total };
+  }
+  return out;
+}
+
 export async function runBench({ quiet = false } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-factory-bench-'));
   const repo = path.join(dir, 'memory.git');
@@ -121,11 +137,32 @@ export async function runBench({ quiet = false } = {}) {
 
     let packModule = null;
     try { packModule = await import('../src/memory/pack.mjs'); } catch {}
+    // Step 6: the derived index is built once (as the first router call after an upgrade would)
+    // and kept in step incrementally; packs then read L2 from it.
+    const indexFile = path.join(dir, 'memory-index.sqlite');
+    const { openIndex, syncRef, closeIndex } = await import('../src/memory/fts.mjs');
+    const idx = openIndex(indexFile);
+    if (idx) {
+      let start = process.hrtime.bigint();
+      syncRef(idx, repo, 'refs/heads/p/bench');
+      results.indexBuild = { fullMs: Math.round(Number(process.hrtime.bigint() - start) / 1e6) };
+      commitProject(repo, 'bench', { subject: 'one more turn', trailers: { Kind: 'turn' } }, view => {
+        view.appendLine(`sessions/${sessionIds[0]}.jsonl`, JSON.stringify({ kind: 'turn', n: 9999, seq: view.seq, task: 'incremental index probe', response_head: 'ok' }));
+      });
+      start = process.hrtime.bigint();
+      syncRef(idx, repo, 'refs/heads/p/bench');
+      results.indexBuild.incrementalMs = +(Number(process.hrtime.bigint() - start) / 1e6).toFixed(2);
+    }
     if (packModule?.benchPack) {
-      const pack = packModule.benchPack({ repo, project: 'bench', sessionIds, countSpawns, dir });
+      const pack = packModule.benchPack({ repo, project: 'bench', sessionIds, countSpawns, dir, indexFile: idx ? indexFile : null });
       Object.assign(results, pack);
+      results.packBackend = idx ? 'fts' : 'scan';
     } else {
       results.pack = 'not built yet (step 4)';
+    }
+    if (idx) {
+      closeIndex(indexFile);
+      results.recall = await evalRecall(dir);
     }
   } finally {
     try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); } catch {}
@@ -137,6 +174,7 @@ export async function runBench({ quiet = false } = {}) {
   if (results.readPathGitProcesses !== undefined && results.readPathGitProcesses > 0) failures.push(`read path spawned ${results.readPathGitProcesses} processes`);
   if (results.noChangeResumeTokens !== undefined && results.noChangeResumeTokens > 0) failures.push(`no-change resume injected ${results.noChangeResumeTokens} tokens`);
   if (results.overBudget) failures.push(`pack exceeded budget ${results.overBudget} times`);
+  if (results.recall && results.recall.lexical.recall < TARGETS.recallAt5) failures.push(`recall@5 ${results.recall.lexical.recall} < ${TARGETS.recallAt5}`);
   results.failures = failures;
   if (!quiet) {
     if (process.argv.includes('--json')) console.log(JSON.stringify(results, null, 2));
@@ -148,6 +186,8 @@ export async function runBench({ quiet = false } = {}) {
       if (results.readPathGitProcesses !== undefined) console.log(`read-path processes spawned: ${results.readPathGitProcesses}`);
       if (results.noChangeResumeTokens !== undefined) console.log(`no-change resume tokens: ${results.noChangeResumeTokens}`);
       if (results.maxTokensOverBudget !== undefined) console.log(`max pack tokens / budget: ${results.maxTokensOverBudget}`);
+      if (results.indexBuild) console.log(`index build  full ${results.indexBuild.fullMs} ms   incremental ${results.indexBuild.incrementalMs} ms   (pack L2 backend: ${results.packBackend})`);
+      if (results.recall) for (const [set, r] of Object.entries(results.recall)) console.log(`recall@5     ${set.padEnd(10)} ${r.recall} (${r.hits}/${r.total})${set === 'lexical' ? `   (target >= ${TARGETS.recallAt5})` : '   (informational)'}`);
       if (typeof results.pack === 'string') console.log(`pack: ${results.pack}`);
       console.log(failures.length ? 'FAIL\n  ' + failures.join('\n  ') : 'PASS');
     }

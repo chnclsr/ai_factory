@@ -289,7 +289,8 @@
     "max_pages": 5,
     "l0_tokens": 300,
     "l1_tokens": 400,
-    "recent_turns_verbatim": 3
+    "recent_turns_verbatim": 3,
+    "index": true
   },
   "watchdog": {
     "initial_timeout_ms": 30000,

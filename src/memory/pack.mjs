@@ -6,14 +6,16 @@
 //   L0  the previous attempt's error in this call (and open handoffs, step 5)  (<= l0_tokens)
 //   L1  this session's turns the engine has not seen, with file changes        (<= l1_tokens)
 //   L2  related pages and other sessions' turns                                (rest of the budget)
-// Tokens are estimated as characters / 4. Reads use git objects only; no process is spawned.
+// Tokens are estimated as characters / 4. L2 is ranked by the derived SQLite index when one is
+// given, else by a term scan; either way reads are in-process and no process is spawned.
 
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { snapshotProject, commitProject } from './store.mjs';
+import { snapshotProject, snapshotRef, commitProject } from './store.mjs';
 import { readMeta, readTurns, engineSessionKey } from './session.mjs';
-import { collectPages, collectTurns, terms } from './search.mjs';
+import { collectPages, collectTurns, terms, indexSearch } from './search.mjs';
+import { PERSONAL_REF } from './project.mjs';
 import { neutralizeForInjection } from './sanitize.mjs';
 
 export const PACK_DEFAULTS = Object.freeze({
@@ -200,27 +202,45 @@ export function buildPack(req) {
   let l2Fill = { kept: [] };
   if (remaining > 20 && queryTerms.length) {
     const scope = req.scope || 'repo';
-    const candidates = [];
-    for (const page of collectPages(snapshot, { cwd: req.cwd, scope })) {
-      const pageSeq = Number(page.meta.seq || 0);
-      if (knownSeq > 0 && pageSeq <= knownSeq) continue;
-      candidates.push({ text: page.text, line: `- note ${page.slug}: ${clip(page.text, 400)}`,
-        source: { kind: 'page', id: page.id, seq: pageSeq, hash: shortHash(page.text) } });
-    }
-    if (scope !== 'mine') {
-      const turns = collectTurns(snapshot, { cwd: req.cwd, scope, sessionLimit: settings.l2_recent_sessions })
-        .filter(item => item.sid !== req.sid && item.turn.seq > knownSeq);
-      for (const item of turns) {
-        const files = describeFiles(item.turn.files);
-        candidates.push({ text: item.text,
-          line: `- other session turn (${item.turn.engine}): ${clip(item.turn.task, 160)} → ${clip(item.turn.response_head, 240)}${files ? `; ${clip(files, 120)}` : ''}`,
-          source: { kind: 'turn', sid: item.sid, n: item.turn.n, seq: item.turn.seq, hash: shortHash(turnSource(item.turn)) } });
+    const pageCandidate = page => {
+      const pageSeq = Number(page.meta?.seq ?? page.seq ?? 0);
+      return { text: page.text, line: `- note ${page.slug}: ${clip(page.text, 400)}`,
+        source: { kind: 'page', id: page.id, seq: pageSeq, hash: shortHash(page.text) } };
+    };
+    const turnCandidate = item => {
+      const files = describeFiles(item.turn.files);
+      return { text: item.text,
+        line: `- other session turn (${item.turn.engine}): ${clip(item.turn.task, 160)} → ${clip(item.turn.response_head, 240)}${files ? `; ${clip(files, 120)}` : ''}`,
+        source: { kind: 'turn', sid: item.sid, n: item.turn.n, seq: item.turn.seq, hash: shortHash(turnSource(item.turn)) } };
+    };
+    let ranked = null;
+    if (req.indexFile) {
+      try {
+        const items = indexSearch({ repoDir: req.repoDir, file: req.indexFile, projectKey: req.project.key, queryTerms, scope,
+          cwd: req.cwd, limit: settings.max_pages,
+          filter: doc => (doc.kind === 'page' ? !(knownSeq > 0 && doc.seq <= knownSeq) : doc.sid !== req.sid && doc.seq > knownSeq) });
+        if (items) ranked = items.map(item => (item.kind === 'page' ? pageCandidate(item) : turnCandidate(item)));
+      } catch (err) {
+        req.onIndexError?.(err);
       }
     }
-    const ranked = candidates.map(c => {
-      const lower = c.text.toLowerCase();
-      return { ...c, score: queryTerms.reduce((n, t) => n + (lower.includes(t) ? 1 : 0), 0) };
-    }).filter(c => c.score > 0).sort((a, b) => b.score - a.score || b.source.seq - a.source.seq).slice(0, settings.max_pages);
+    if (!ranked) {
+      const candidates = [];
+      for (const page of collectPages(scope === 'mine' ? snapshotRef(req.repoDir, PERSONAL_REF) : snapshot, { cwd: req.cwd, scope })) {
+        const candidate = pageCandidate(page);
+        if (knownSeq > 0 && candidate.source.seq <= knownSeq) continue;
+        candidates.push(candidate);
+      }
+      if (scope !== 'mine') {
+        const turns = collectTurns(snapshot, { cwd: req.cwd, scope, sessionLimit: settings.l2_recent_sessions })
+          .filter(item => item.sid !== req.sid && item.turn.seq > knownSeq);
+        for (const item of turns) candidates.push(turnCandidate(item));
+      }
+      ranked = candidates.map(c => {
+        const lower = c.text.toLowerCase();
+        return { ...c, score: queryTerms.reduce((n, t) => n + (lower.includes(t) ? 1 : 0), 0) };
+      }).filter(c => c.score > 0).sort((a, b) => b.score - a.score || b.source.seq - a.source.seq).slice(0, settings.max_pages);
+    }
     l2Fill = fill(ranked, remaining - 8);
     if (l2Fill.kept.length) sections.push('Related in this project:\n' + l2Fill.kept.map(c => c.line).join('\n'));
   }
@@ -245,10 +265,10 @@ export function buildPack(req) {
 }
 
 // Called by scripts/bench-memory.mjs with its fixture.
-export function benchPack({ repo, project, sessionIds, countSpawns, dir }) {
+export function benchPack({ repo, project, sessionIds, countSpawns, dir, indexFile = null }) {
   const routerConfig = { engines: { vibe: { models: { 'vibe-glm-5.3-flash': { id: 'zai-glm-5-3-flash', memory_budget_tokens: 800 } } } } };
   const cacheDir = path.join(dir, 'memory-cache');
-  const base = { repoDir: repo, project: { key: project }, engine: 'vibe', model: 'vibe-glm-5.3-flash', routerConfig, cacheDir, scope: 'repo', cwd: '' };
+  const base = { repoDir: repo, project: { key: project }, engine: 'vibe', model: 'vibe-glm-5.3-flash', routerConfig, cacheDir, scope: 'repo', cwd: '', indexFile };
   const time = fn => { const start = process.hrtime.bigint(); const value = fn(); return { value, ms: Number(process.hrtime.bigint() - start) / 1e6 }; };
   const cold = [];
   const warm = [];

@@ -9,13 +9,14 @@
 //   memory handoff list [--all]
 //   memory handoff accept <hid>                 take an open handoff (exactly one taker wins)
 //   memory note add <text> [--scope repo|mine]  store a note page (mine = personal ref)
-//   memory search <query> [--scope repo|dir|mine]
+//   memory search <query> [--scope repo|dir|mine] [--global]
+//                                               --global: every project, never the personal ref
 
 import fs from 'node:fs';
 import { resolveProject, findGitRepo, UNSCOPED_PROJECT } from './project.mjs';
 import { snapshotProject, commitProject, writePage } from './store.mjs';
 import { findSession, listSessions, readTurns, readMeta, sessionPaths, ALIASES_FILE } from './session.mjs';
-import { search, SCOPES } from './search.mjs';
+import { searchWithInfo, SCOPES } from './search.mjs';
 import { beginHandoff, claimHandoff, listHandoffs, isValidHandoffId } from './handoff.mjs';
 import { revertPatch } from './worktree.mjs';
 import { sanitizeValue } from './sanitize.mjs';
@@ -25,7 +26,7 @@ function parseArgs(argv) {
   const flags = {};
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg === '--yes' || arg === '-y') flags[arg.replace(/^-+/, '')] = true;
+    if (arg === '--yes' || arg === '-y' || arg === '--global') flags[arg.replace(/^-+/, '')] = true;
     else if (arg.startsWith('--')) flags[arg.slice(2)] = argv[++i] ?? '';
     else positional.push(arg);
   }
@@ -52,7 +53,12 @@ function pickSession(snapshot, wanted) {
   return listSessions(snapshot)[0]?.sid || null;
 }
 
-export async function runMemoryCli(argv, { repoDir, cwd = process.cwd(), io: ioOverride } = {}) {
+function readMemoryConfig(configFile) {
+  if (!configFile) return {};
+  try { return JSON.parse(fs.readFileSync(configFile, 'utf8'))?.memory || {}; } catch { return {}; }
+}
+
+export async function runMemoryCli(argv, { repoDir, indexFile = null, configFile = null, cwd = process.cwd(), io: ioOverride } = {}) {
   const io = ioOverride || { out: s => process.stdout.write(s), err: s => process.stderr.write(s), isTTY: Boolean(process.stdin.isTTY) };
   const { positional, flags } = parseArgs(argv);
   const [group, action, arg] = positional;
@@ -149,9 +155,16 @@ export async function runMemoryCli(argv, { repoDir, cwd = process.cwd(), io: ioO
     const query = positional.slice(1).join(' ');
     const scope = flags.scope || 'repo';
     if (!SCOPES.includes(scope)) { io.err(`Unknown scope: ${scope} (use ${SCOPES.join(', ')})\n`); return 1; }
-    const hits = search(repoDir, { projectKey: project.key, query, scope, cwd: workdir, limit: Number(flags.limit) || 10 });
+    const index = indexFile && readMemoryConfig(configFile).index !== false ? { file: indexFile } : null;
+    let hits;
+    try {
+      ({ items: hits } = searchWithInfo(repoDir, { projectKey: project.key, query, scope, cwd: workdir, limit: Number(flags.limit) || 10,
+        global: Boolean(flags.global), index,
+        onError: err => io.err(`[AI Factory Memory] index unavailable, scanning git objects instead: ${err.message}\n`) }));
+    } catch (err) { io.err(`${err.message}\n`); return 1; }
     for (const hit of hits) {
-      const label = hit.kind === 'page' ? `page ${hit.slug}` : `turn ${hit.id}`;
+      const where = flags.global ? `[${hit.project}] ` : '';
+      const label = where + (hit.kind === 'page' ? `page ${hit.slug}` : `turn ${hit.id}`);
       io.out(`${label}: ${hit.text.replace(/\s+/g, ' ').slice(0, 160)}\n`);
     }
     if (!hits.length) io.out('(no matches)\n');
@@ -189,7 +202,7 @@ export async function runMemoryCli(argv, { repoDir, cwd = process.cwd(), io: ioO
   }
 
   io.err('Usage: node router.mjs memory session show [<alias|sid>] | session adopt <alias> | turn diff <n> | turn revert <n> [--yes]\n' +
-    '       | note add <text> [--scope repo|mine] | search <query> [--scope repo|dir|mine]\n' +
+    '       | note add <text> [--scope repo|mine] | search <query> [--scope repo|dir|mine] [--global]\n' +
     '       | handoff begin --to <engine|any> [--task <text>] | handoff list [--all] | handoff accept <hid>\n');
   return 1;
 }

@@ -19,7 +19,7 @@ import { fileURLToPath } from 'url';
 import { spawn, execSync } from 'child_process';
 import crypto from 'crypto';
 import { fetchAllQuotas, formatQuotaTable, checkEngineQuotaGate } from './quota_tracker.mjs';
-import { ROOT, CONFIG_FILE, DATA_DIR, MEMORY_REPO, stateFile } from '../lib/paths.mjs';
+import { ROOT, CONFIG_FILE, DATA_DIR, MEMORY_REPO, MEMORY_INDEX, stateFile } from '../lib/paths.mjs';
 import { decideWatchdogAction, sampleTreeCpuMs } from './watchdog.mjs';
 
 const __dirname = ROOT;
@@ -778,7 +778,7 @@ async function loadMemory(config) {
   if (config?.memory?.enabled !== true) return null;
   try {
     const { createMemory } = await import('./memory/index.mjs');
-    return createMemory({ repoDir: MEMORY_REPO, dataDir: DATA_DIR, memoryConfig: config.memory, routerConfig: config });
+    return createMemory({ repoDir: MEMORY_REPO, dataDir: DATA_DIR, indexFile: MEMORY_INDEX, memoryConfig: config.memory, routerConfig: config });
   } catch (err) {
     console.warn('[AI Factory Memory] disabled for this call: ' + (err?.message || err));
     return null;
@@ -803,7 +803,7 @@ async function main() {
 
   if (process.argv[2] === 'memory') {
     const { runMemoryCli } = await import('./memory/cli.mjs');
-    process.exit(await runMemoryCli(process.argv.slice(3), { repoDir: MEMORY_REPO }));
+    process.exit(await runMemoryCli(process.argv.slice(3), { repoDir: MEMORY_REPO, indexFile: MEMORY_INDEX, configFile: CONFIG_FILE }));
   }
 
   const options = parseCliArgs();
