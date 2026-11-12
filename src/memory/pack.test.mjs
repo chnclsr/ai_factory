@@ -93,7 +93,11 @@ test('the execution report has a memory line that says what was injected and sav
   assert.match(result.stdout, new RegExp(`^memory: project=${key}, session=r, injected=none \\(project memory is empty\\), saved=turn 1$`, 'm'));
 
   result = h.run([...claude, '--name', 'r', '--task', 'ok']);
-  assert.match(result.stdout, /^memory: .*injected=none \(task too short\), saved=turn 2$/m);
+  // A short follow-up still gets the session's own history; only keyword search is skipped.
+  assert.match(result.stdout, /^memory: .*injected=1 turn\(s\) .*, saved=turn 2$/m);
+  // With no history there is nothing to give a short task.
+  result = h.run([...claude, '--name', 'fresh', '--task', 'ok']);
+  assert.match(result.stdout, /^memory: .*session=fresh, injected=none \(task too short\), saved=turn 1$/m);
 
   note(h, cwd, 'parser module must reject tabs in keys');
   result = h.run([...claude, '--name', 'r', '--task', 'Handle the parser edge cases we agreed on']);

@@ -133,7 +133,9 @@ export function buildPack(req) {
   const budget = req.budget ?? budgetFor(req.routerConfig, req.engine, req.model, settings);
   const empty = extra => ({ text: '', tokens: 0, budget, injected: [], ...extra });
   const task = String(req.task || '');
-  if (task.trim().length < settings.min_task_chars) return empty({ gated: 'short_task' });
+  // A short task ("emin misin", "devam et") is usually a follow-up. It still gets the session's own
+  // history and any handoff, which need no keywords; only the keyword search of L2 is skipped.
+  const shortTask = task.trim().length < settings.min_task_chars;
   if (budget <= 0) return empty({ gated: 'no_budget' });
 
   const snapshot = snapshotProject(req.repoDir, req.project.key);
@@ -201,7 +203,7 @@ export function buildPack(req) {
 
   // L2: related pages and other sessions' turns newer than knownSeq, at most max_pages items.
   let l2Fill = { kept: [] };
-  if (remaining > 20 && queryTerms.length) {
+  if (remaining > 20 && queryTerms.length && !shortTask) {
     const scope = req.scope || 'repo';
     const pageCandidate = page => {
       const pageSeq = Number(page.meta?.seq ?? page.seq ?? 0);
@@ -250,7 +252,7 @@ export function buildPack(req) {
 
   let pack;
   if (!sections.length) {
-    pack = empty({ knownSeq, headSeq, gated: 'nothing_relevant' });
+    pack = empty({ knownSeq, headSeq, gated: shortTask ? 'short_task' : 'nothing_relevant' });
   } else {
     // Only recorded content is neutralised; the genuine wrapper goes around it afterwards, so a
     // stored "</retrieved-memory>" can never close the block early.
