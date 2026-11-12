@@ -17,7 +17,7 @@ var AI_FACTORY_MODELS = {
       ]
     },
     "vibe": {
-      "default": "vibe-glm-5.3-flash",
+      "default": "vibe-glm-5.3",
       "effort": [],
       "models": [
         "vibe-glm-5.3-flash",
@@ -59,11 +59,8 @@ var AI_FACTORY_MODELS = {
     }
   },
   "chain": [
-    "vibe/vibe-glm-5.3-flash",
     "vibe/vibe-glm-5.3",
-    "opencode/deepseek-v4.1-flash-free",
-    "opencode/mimo-v2.6-flash-free",
-    "opencode/glm-5.3-flash-free",
+    "vibe/vibe-glm-5.3-flash",
     "muse/muse-spark-1.3-contributor"
   ]
 };
