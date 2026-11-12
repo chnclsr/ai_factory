@@ -8,8 +8,13 @@ import { ROOT, CONFIG_FILE } from '../lib/paths.mjs';
 const EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'];
 const config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
 
+// The picker offers the engines the router actually uses: those in the fallback chain, plus
+// Claude, which is the critic. Engines kept in the config for manual --engine calls (OpenCode,
+// Codex) stay out of the picker.
+const offered = new Set([...config.fallback_chain.map(step => step.engine), 'claude']);
 const engines = {};
 for (const [engine, definition] of Object.entries(config.engines)) {
+  if (!offered.has(engine)) continue;
   engines[engine] = {
     default: definition.default_model,
     // Claude is the only engine whose CLI takes a reasoning-effort flag.

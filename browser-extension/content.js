@@ -54,7 +54,7 @@ const CRITIC_MODEL = ENGINES.claude?.models.includes('opus-5.5') ? 'opus-5.5' : 
 // extra reasoning pays for itself; "model" and "effort" empty mean the engine's own default.
 function defaultState() {
   return {
-    actor: { enabled: true, engine: ENGINES.vibe ? 'vibe' : ENGINES.opencode ? 'opencode' : 'auto', model: '', effort: '' },
+    actor: { enabled: true, engine: ENGINES.vibe ? 'vibe' : 'auto', model: '', effort: '' },
     critic: { enabled: false, engine: 'claude', model: CRITIC_MODEL, effort: 'high' }
   };
 }

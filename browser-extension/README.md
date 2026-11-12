@@ -23,7 +23,7 @@ Two rows, each with an on/off switch, an engine, a model and (for Claude) an eff
 
 | Row | Role | Default |
 |---|---|---|
-| **Actor** | Does the task. | **On**: `opencode` / `deepseek-v4.1-flash-free` |
+| **Actor** | Does the task. | **On**: `vibe` / `vibe-glm-5.3` |
 | **Critic** | Reviews what the actor did. | **Off**: `claude` / `opus-5.5` at `high` effort |
 
 Engine `auto` (actor only) adds no engine flags and lets the router use its free chain. Models
