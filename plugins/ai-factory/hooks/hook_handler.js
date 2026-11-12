@@ -84,8 +84,17 @@ function removesDirectory(script) {
 // reads files; it gets 50 ms, and on timeout or any error the rule goes out without it.
 const MEMORY_DEADLINE_MS = 50;
 
+// Antigravity names the open conversation in every payload. Passing it to the router as
+// --session gives each conversation its own memory session inside the project, so a new chat in
+// the same project starts a new branch instead of joining the previous one.
+function payloadSession(payload) {
+  const id = payload && payload.conversationId;
+  return typeof id === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(id) && !id.includes('..') && !id.endsWith('.lock') ? id : '';
+}
+
 function payloadCwd(payload) {
-  for (const value of [payload.cwd, payload.workspaceRoot, payload.workspace_root, payload.workspace && payload.workspace.path]) {
+  const paths = Array.isArray(payload.workspacePaths) ? payload.workspacePaths : [];
+  for (const value of [payload.cwd, payload.workspaceRoot, payload.workspace_root, payload.workspace && payload.workspace.path, paths[0]]) {
     if (typeof value === 'string' && value && path.isAbsolute(value)) return value;
   }
   return process.cwd();
@@ -126,7 +135,10 @@ process.stdin.on('end', async () => {
     const installation = fs.existsSync(installFile)
       ? JSON.parse(fs.readFileSync(installFile, 'utf8'))
       : { node: process.execPath, router: path.resolve(__dirname, '../../..', 'router.mjs') };
-    const command = (process.platform === 'win32' ? '& ' : '') + JSON.stringify(installation.node) + ' ' + JSON.stringify(installation.router);
+    const baseCommand = (process.platform === 'win32' ? '& ' : '') + JSON.stringify(installation.node) + ' ' + JSON.stringify(installation.router);
+    const conversation = payloadSession(payload);
+    // The agent copies this command into its router calls, so --session rides along.
+    const command = conversation ? baseCommand + ' --session ' + conversation : baseCommand;
     if (payload.toolCall) {
       const name = payload.toolCall.name;
       const args = payload.toolCall.args || {};
@@ -154,7 +166,7 @@ process.stdin.on('end', async () => {
     }
     const rule = fs.readFileSync(path.join(pluginRoot, 'rules', 'ai_factory_router.md'), 'utf8').replaceAll('{{ROUTER_COMMAND}}', command);
     let notice = '';
-    try { notice = await memoryNotice(installation, payload, command); } catch {}
+    try { notice = await memoryNotice(installation, payload, baseCommand); } catch {}
     console.log(JSON.stringify({ injectSteps: [{ systemMessage: { systemMessage: notice ? rule + '\n\n' + notice : rule } }] }));
   } catch {
     // A malformed payload or unavailable file must never block the host session.

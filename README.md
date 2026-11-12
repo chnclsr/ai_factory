@@ -290,6 +290,8 @@ node router.mjs memory project merge <source-key> <target-key> --yes
 
 Automatic sessions: a call with no `--name`, `--resume` or `--session` continues the project's most recent session if it was active in the last `memory.auto_session_minutes` (default 120; `0` starts a new session every call). The next engine then gets the earlier turns as "this session" in its memory block, so plain calls that switch provider keep the conversation. Only memory carries over; the engine's own conversation still starts fresh unless you use `--resume`. The report shows `session=<id> (continued)`. Pass `--name <new>` to start a separate thread inside the 120-minute window.
 
+Antigravity conversations: the plugin hook reads `conversationId` and `workspacePaths` from Antigravity's payload and puts `--session <conversationId>` into the router command it hands the agent. Each Antigravity conversation therefore gets its own memory session inside the project (the project comes from the workspace folder), and a new chat in the same project starts a new branch instead of joining the previous one. Within one conversation the session never expires, whatever `auto_session_minutes` says; that setting only applies to calls from outside Antigravity.
+
 Report line: with memory enabled, every execution report ends with a `memory:` line naming the project and session, what the memory block gave the engine and whether the turn was saved:
 
 ```

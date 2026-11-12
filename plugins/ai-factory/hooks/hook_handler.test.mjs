@@ -74,3 +74,23 @@ test('deleting files, including a folder\'s whole contents, stays allowed', () =
   ];
   for (const command of allowed) assert.equal(decide(command), 'allow', command);
 });
+
+function injectedRule(payload) {
+  const result = spawnSync(process.execPath, [handler], { input: JSON.stringify(payload), encoding: 'utf8', timeout: 15000 });
+  assert.equal(result.status, 0, result.stderr);
+  return JSON.parse(result.stdout).injectSteps[0].systemMessage.systemMessage;
+}
+
+test('the injected router command carries the Antigravity conversation as --session', () => {
+  const id = 'ec33ebf9-0cba-4100-8142-c61503f6c587';
+  const rule = injectedRule({ conversationId: id, workspacePaths: [process.cwd()] });
+  assert.match(rule, new RegExp(`router\.mjs" --session ${id} --task`));
+  assert.doesNotMatch(rule, /\{\{ROUTER_COMMAND\}\}/);
+});
+
+test('a missing or unsafe conversation id adds no --session', () => {
+  for (const conversationId of [undefined, '', '../evil', 'a b', 'x.lock', 42]) {
+    const rule = injectedRule({ conversationId });
+    assert.doesNotMatch(rule, /--session/, String(conversationId));
+  }
+});
