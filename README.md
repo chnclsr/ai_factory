@@ -288,6 +288,15 @@ node router.mjs memory project rename <old-key> <new-key> --yes
 node router.mjs memory project merge <source-key> <target-key> --yes
 ```
 
+Report line: with memory enabled, every execution report ends with a `memory:` line naming the project and session, what the memory block gave the engine and whether the turn was saved:
+
+```
+memory: project=billing, session=r, injected=2 turn(s) + 1 note(s) (~340/1200 tokens), saved=turn 3
+memory: project=billing, session=0193a2f1, injected=none (task too short), saved=turn 4
+```
+
+`injected=none` gives the reason: empty project memory, nothing relevant found, task too short, the resumed engine session already up to date, or a nested router call. The Antigravity rule tells the agent to quote this line in its summary.
+
 Handoffs: when a call ends in a Gemini handoff, or every engine fails, memory writes an open handoff and the report gains a `handoff: <id>` line. The plugin hook shows open handoffs for the current project to Antigravity, inside the same untrusted block, together with the command that takes one. A router engine sees open handoffs addressed to it (or to `any`) in its block, and a successful call takes them. Taking a handoff succeeds exactly once, however many agents try at the same time.
 
 ```bash

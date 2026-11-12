@@ -82,6 +82,24 @@ test('A2 + A5: a resumed engine session gets only the delta, and nothing when no
   assert.doesNotMatch(block, /Write the parser module/);
 });
 
+test('the execution report has a memory line that says what was injected and saved', t => {
+  const h = makeHarness(t);
+  const cwd = workDir(h, 'report');
+  const claude = ['--engine', 'claude', '--model', 'haiku-5.5', '--no-fallback', '--cwd', cwd];
+  const key = resolveProject({ cwd }).key;
+
+  let result = h.run([...claude, '--name', 'r', '--task', 'Write the parser module for the config format']);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, new RegExp(`^memory: project=${key}, session=r, injected=none \\(project memory is empty\\), saved=turn 1$`, 'm'));
+
+  result = h.run([...claude, '--name', 'r', '--task', 'ok']);
+  assert.match(result.stdout, /^memory: .*injected=none \(task too short\), saved=turn 2$/m);
+
+  note(h, cwd, 'parser module must reject tabs in keys');
+  result = h.run([...claude, '--name', 'r', '--task', 'Handle the parser edge cases we agreed on']);
+  assert.match(result.stdout, /^memory: .*injected=.*1 note\(s\).* \(~\d+\/\d+ tokens\), saved=turn 3$/m);
+});
+
 test('A3: after a failure the next engine in the chain gets the earlier error in L0', t => {
   const h = makeHarness(t);
   const cwd = workDir(h, 'fallback');

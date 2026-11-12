@@ -51,7 +51,8 @@ The router checks the process tree after 30 seconds without initial output or 12
 For long jobs, the caller may raise watchdog settings in router_config.json.
 
 After execution, summarize actual output. Quote path and succeed_with only from
-the [AI FACTORY EXECUTION REPORT] block. A handoff is not proof the task is done.
+the [AI FACTORY EXECUTION REPORT] block. When the block has a `memory:` line, quote it
+unchanged so the user can see whether memory was used. A handoff is not proof the task is done.
 Only report tests and edits actually performed.
 Model access, pricing and quotas depend on the user's provider account.
 

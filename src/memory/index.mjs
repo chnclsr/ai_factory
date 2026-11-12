@@ -107,6 +107,10 @@ export function createMemory({ repoDir, dataDir, indexFile = null, memoryConfig 
       // The turn line records what the engine that ran last was shown (source turn, seq, hash).
       ctx.injected = pack.text ? pack.injected : [];
       ctx.injectedPack = pack.text ? { hash: pack.hash, tokens: pack.tokens, budget: pack.budget, engine: request.engine } : null;
+      // For the execution report only: why nothing was injected, when nothing was.
+      ctx.packStatus = pack.text ? null
+        : pack.gated === 'up_to_date' && !pack.headSeq ? 'empty'
+        : (pack.gated || 'nothing_relevant');
       return buildPackedPrompt(task, pack);
     });
   }
@@ -142,5 +146,40 @@ export function createMemory({ repoDir, dataDir, indexFile = null, memoryConfig 
     });
   }
 
-  return { settings, resolveSession, buildPrompt, recordTurn, repoDir, dataDir, indexFile };
+  return { settings, resolveSession, buildPrompt, recordTurn, reportLine, repoDir, dataDir, indexFile };
+}
+
+const PACK_STATUS_TEXT = {
+  short_task: 'task too short',
+  no_budget: 'no budget for this model',
+  budget_below_overhead: 'budget too small',
+  up_to_date: 'engine session already up to date',
+  empty: 'project memory is empty',
+  nothing_relevant: 'nothing relevant found',
+  nested: 'nested router call'
+};
+
+// One line for the [AI FACTORY EXECUTION REPORT]: which project and session the call ran in,
+// what the memory block gave the engine, and whether the turn was saved. Never throws.
+export function reportLine(ctx, result, env = process.env) {
+  try {
+    if (!ctx) return 'memory: unavailable for this call (see [AI Factory Memory] warnings)';
+    if (ctx.missing) return `memory: resume alias not found in project ${ctx.project?.key || '?'}, nothing used or saved`;
+    const parts = [`project=${ctx.project.key}`, `session=${ctx.alias || String(ctx.sid).slice(0, 8)}`];
+    const depth = Number.parseInt(env.AI_FACTORY_ROUTER_DEPTH || '0', 10);
+    const status = Number.isSafeInteger(depth) && depth > 0 ? 'nested' : ctx.packStatus;
+    if (ctx.injectedPack) {
+      const counts = {};
+      for (const item of ctx.injected || []) counts[item.kind] = (counts[item.kind] || 0) + 1;
+      const label = { turn: 'turn(s)', page: 'note(s)', handoff: 'handoff(s)' };
+      const what = Object.entries(counts).map(([kind, n]) => `${n} ${label[kind] || kind}`).join(' + ') || 'context';
+      parts.push(`injected=${what} (~${ctx.injectedPack.tokens}/${ctx.injectedPack.budget} tokens)`);
+    } else {
+      parts.push(`injected=none (${PACK_STATUS_TEXT[status] || status || 'engine not reached'})`);
+    }
+    parts.push(result?.n ? `saved=turn ${result.n}` : 'saved=no');
+    return 'memory: ' + parts.join(', ');
+  } catch {
+    return 'memory: report unavailable';
+  }
 }

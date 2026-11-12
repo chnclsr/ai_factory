@@ -1034,6 +1034,7 @@ Kullan\u0131m:
   console.log(`errors: ${errorsStr}`);
   console.log(`succeed_with: ${succeedStr}`);
   if (memoryResult?.handoffId) console.log(`handoff: ${memoryResult.handoffId}`);
+  if (memory) console.log(memory.reportLine(memoryCtx, memoryResult));
   console.log('='.repeat(60) + '\n');
 
   process.exit(succeedWith ? 0 : 1);
