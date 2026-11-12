@@ -21,6 +21,7 @@ import crypto from 'crypto';
 import { fetchAllQuotas, formatQuotaTable, checkEngineQuotaGate } from './quota_tracker.mjs';
 import { ROOT, CONFIG_FILE, DATA_DIR, MEMORY_REPO, MEMORY_INDEX, stateFile } from '../lib/paths.mjs';
 import { decideWatchdogAction, sampleTreeCpuMs } from './watchdog.mjs';
+import { createLineCapture } from './stream-capture.mjs';
 
 const __dirname = ROOT;
 const REGISTRY_FILE = stateFile('session_registry.json');
@@ -341,6 +342,13 @@ async function runCommand(cmdString, cwd, engineName, config) {
 
     let lastActivityAt = Date.now();
     let tailBuffer = [];
+    const capture = createLineCapture({
+      onLine: line => {
+        if (!line.trim()) return;
+        tailBuffer.push(line);
+        if (tailBuffer.length > 100) tailBuffer.shift();
+      }
+    });
     let isFinished = false;
     let previousCpuMs = null;
     let lastCpuProgressAt = Date.now();
@@ -357,7 +365,9 @@ async function runCommand(cmdString, cwd, engineName, config) {
       lastActivityAt = Date.now();
       previousCpuMs = null;
       lastCpuProgressAt = lastActivityAt;
-      const str = chunk.toString('utf8');
+      // One decoder and one unfinished line per stream: a chunk may end inside a line or inside a
+      // multi-byte character, and the tail the memory records must not carry either break.
+      const str = capture.write(streamName, chunk);
       if (streamName === 'stdout' && (JSON_ENGINES.includes(engineName))) {
         jsonRemainder += str;
         const jsonLines = jsonRemainder.split('\n');
@@ -368,13 +378,6 @@ async function runCommand(cmdString, cwd, engineName, config) {
         process.stdout.write(str);
       } else if (streamName === 'stderr') {
         process.stderr.write(str);
-      }
-      const lines = str.split('\n');
-      for (const line of lines) {
-        if (line.trim()) {
-          tailBuffer.push(line);
-          if (tailBuffer.length > 100) tailBuffer.shift();
-        }
       }
     }
 
@@ -387,6 +390,7 @@ async function runCommand(cmdString, cwd, engineName, config) {
       console.warn('\n[AI-FACTORY-WATCHDOG] ' + engineName + ': ' + reason +
         '; elapsed=' + (Date.now() - startTime) + 'ms, idle=' + (Date.now() - lastActivityAt) + 'ms. Terminating process tree.');
       killProcessTree(child.pid);
+      capture.flush();
       resolve({ exitCode: 42, signal: 'SIGKILL', watchdogTimeout: true,
         watchdogReason: reason, initialHang: !hasReceivedAnyOutput, output: tailBuffer.join('\n') });
     }
@@ -435,6 +439,7 @@ async function runCommand(cmdString, cwd, engineName, config) {
       if (isFinished) return;
       isFinished = true;
       clearInterval(watchdogInterval);
+      capture.flush();
       if (jsonRemainder.trim() && (JSON_ENGINES.includes(engineName))) inspectJsonLine(jsonRemainder);
       // P1 D\u00fczeltmesi: Sinyalle kapat\u0131ld\u0131ysa (signal != null) veya code null ise asla 0 sayma!
       const effectiveCode = signal ? 1 : (code ?? 1);
