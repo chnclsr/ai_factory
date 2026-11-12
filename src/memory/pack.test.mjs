@@ -26,7 +26,7 @@ test('buildPrompt puts the pack first and leaves the task untouched', () => {
   assert.equal(buildPrompt('task text', { text: '' }), 'task text');
   assert.equal(buildPrompt('task text', null), 'task text');
   assert.equal(buildPrompt('task text', { text: '<retrieved-memory untrusted="true">x</retrieved-memory>' }),
-    '<retrieved-memory untrusted="true">x</retrieved-memory>\n\ntask text');
+    '<retrieved-memory untrusted="true">x</retrieved-memory>\n\nNew request:\ntask text');
   assert.equal(budgetFor(ROUTER_CONFIG, 'claude', 'claude-haiku-5-5'), 2000);
   assert.equal(budgetFor(ROUTER_CONFIG, 'opencode', 'opencode/deepseek-v4.1-flash-free'), 800);
   assert.equal(budgetFor(ROUTER_CONFIG, 'muse', 'muse-spark-1.3-contributor'), 800);
@@ -52,7 +52,7 @@ test('A1: every engine gets the block through its own task channel and within it
     assert.match(call.command, channel);
     const block = memoryBlock(call.prompt);
     assert.ok(block, `${engine} got no memory block`);
-    assert.ok(call.prompt.endsWith('\n\n' + task), `${engine}: task must follow the block unchanged`);
+    assert.ok(call.prompt.endsWith('</retrieved-memory>\n\nNew request:\n' + task), `${engine}: task must follow the block unchanged`);
     assert.match(block, /parser decision/);
     const budget = budgetFor(ROUTER_CONFIG, engine, model);
     assert.ok(estimateTokens(block) <= budget, `${engine}: ${estimateTokens(block)} tokens > ${budget}`);
@@ -115,7 +115,8 @@ test('without --name a call continues the latest session and carries it across e
   assert.equal(second.status, 0, second.stdout + second.stderr);
   assert.match(second.stdout, /session=[0-9a-f]{8} \(continued\), injected=1 turn\(s\) \(~\d+\/\d+ tokens\), saved=turn 2$/m);
   const block = memoryBlock(h.lastCall().prompt);
-  assert.match(block, /This session/);
+  assert.match(block, /This conversation so far/);
+  assert.match(block, /refers to the latest turn that gave a substantive answer/);
   assert.match(block, /Write the parser module/);
   const sessions = listSessions(snapshotProject(h.repo, resolveProject({ cwd }).key));
   assert.equal(sessions.length, 1);
