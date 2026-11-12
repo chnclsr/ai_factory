@@ -272,6 +272,7 @@
     "enabled": true,
     "track_files": true,
     "file_budget_ms": 2000,
+    "auto_session_minutes": 120,
     "default_budget_tokens": 1200,
     "min_task_chars": 20,
     "max_pages": 5,

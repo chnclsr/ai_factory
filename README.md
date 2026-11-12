@@ -288,6 +288,8 @@ node router.mjs memory project rename <old-key> <new-key> --yes
 node router.mjs memory project merge <source-key> <target-key> --yes
 ```
 
+Automatic sessions: a call with no `--name`, `--resume` or `--session` continues the project's most recent session if it was active in the last `memory.auto_session_minutes` (default 120; `0` starts a new session every call). The next engine then gets the earlier turns as "this session" in its memory block, so plain calls that switch provider keep the conversation. Only memory carries over; the engine's own conversation still starts fresh unless you use `--resume`. The report shows `session=<id> (continued)`. Pass `--name <new>` to start a separate thread inside the 120-minute window.
+
 Report line: with memory enabled, every execution report ends with a `memory:` line naming the project and session, what the memory block gave the engine and whether the turn was saved:
 
 ```

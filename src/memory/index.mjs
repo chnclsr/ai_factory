@@ -7,7 +7,7 @@
 import { resolveProject, UNSCOPED_PROJECT } from './project.mjs';
 import { followMoves } from './projects.mjs';
 import { takeSnapshot, diffSnapshots } from './worktree.mjs';
-import { newSessionId, isValidSid, recordTurnCommit, findSession, readMeta } from './session.mjs';
+import { newSessionId, isValidSid, recordTurnCommit, findSession, readMeta, listSessions } from './session.mjs';
 import { snapshotProject } from './store.mjs';
 import { migrateRegistry } from './migrate.mjs';
 import { SCOPES } from './search.mjs';
@@ -22,7 +22,10 @@ export const DEFAULT_MEMORY_CONFIG = Object.freeze({
   enabled: false,
   track_files: true,
   file_budget_ms: 2000,
-  index: true
+  index: true,
+  // A call with no --name/--resume/--session continues this project's most recent session when
+  // that session was active within this many minutes. 0 starts a new session every time.
+  auto_session_minutes: 0
 });
 
 export function createMemory({ repoDir, dataDir, indexFile = null, memoryConfig = {}, routerConfig = {}, env = process.env, log = console.warn }) {
@@ -81,8 +84,19 @@ export function createMemory({ repoDir, dataDir, indexFile = null, memoryConfig 
       } else if (alias && !sid) {
         sid = findSession(snapshotProject(repoDir, project.key), alias) || '';
       }
+      // No session named anywhere: continue the project's latest recent session, so provider
+      // switches between plain router calls keep the conversation (memory only; the engine
+      // conversation itself starts fresh unless --resume is used).
+      let continued = false;
+      const windowMs = Number.isFinite(settings.auto_session_minutes) ? settings.auto_session_minutes * 60000 : 0;
+      const nested = Number.parseInt(env.AI_FACTORY_ROUTER_DEPTH || '0', 10) > 0;
+      if (!sid && !alias && !opts.resume && windowMs > 0 && !nested) {
+        const latest = listSessions(snapshotProject(repoDir, project.key))[0];
+        const updated = latest ? Date.parse(latest.updated || '') : NaN;
+        if (latest && Number.isFinite(updated) && Date.now() - updated <= windowMs) { sid = latest.sid; continued = true; }
+      }
       sid = sid || newSessionId();
-      const ctx = { project, sid, cwd, alias, scope, resume, injected: [] };
+      const ctx = { project, sid, cwd, alias, scope, resume, injected: [], continued };
       ctx.before = takeSnapshot(cwd, { ignorePaths: project.ignorePaths, budgetMs: settings.file_budget_ms, enabled: settings.track_files });
       return ctx;
     });
@@ -165,7 +179,7 @@ export function reportLine(ctx, result, env = process.env) {
   try {
     if (!ctx) return 'memory: unavailable for this call (see [AI Factory Memory] warnings)';
     if (ctx.missing) return `memory: resume alias not found in project ${ctx.project?.key || '?'}, nothing used or saved`;
-    const parts = [`project=${ctx.project.key}`, `session=${ctx.alias || String(ctx.sid).slice(0, 8)}`];
+    const parts = [`project=${ctx.project.key}`, `session=${ctx.alias || String(ctx.sid).slice(0, 8)}${ctx.continued ? ' (continued)' : ''}`];
     const depth = Number.parseInt(env.AI_FACTORY_ROUTER_DEPTH || '0', 10);
     const status = Number.isSafeInteger(depth) && depth > 0 ? 'nested' : ctx.packStatus;
     if (ctx.injectedPack) {

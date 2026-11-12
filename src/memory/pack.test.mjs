@@ -100,6 +100,23 @@ test('the execution report has a memory line that says what was injected and sav
   assert.match(result.stdout, /^memory: .*injected=.*1 note\(s\).* \(~\d+\/\d+ tokens\), saved=turn 3$/m);
 });
 
+test('without --name a call continues the latest session and carries it across engines', t => {
+  const h = makeHarness(t, { config: cfg => { cfg.memory.auto_session_minutes = 120; } });
+  const cwd = workDir(h, 'auto');
+  const base = ['--cwd', cwd, '--no-fallback'];
+  const first = h.run([...base, '--engine', 'claude', '--model', 'haiku-5.5', '--task', 'Write the parser module for the config format']);
+  assert.equal(first.status, 0, first.stdout + first.stderr);
+  assert.match(first.stdout, /session=[0-9a-f]{8}, injected=none/);
+  const second = h.run([...base, '--engine', 'vibe', '--task', 'Summarise what the previous step did to the config']);
+  assert.equal(second.status, 0, second.stdout + second.stderr);
+  assert.match(second.stdout, /session=[0-9a-f]{8} \(continued\), injected=1 turn\(s\) \(~\d+\/\d+ tokens\), saved=turn 2$/m);
+  const block = memoryBlock(h.lastCall().prompt);
+  assert.match(block, /This session/);
+  assert.match(block, /Write the parser module/);
+  const sessions = listSessions(snapshotProject(h.repo, resolveProject({ cwd }).key));
+  assert.equal(sessions.length, 1);
+});
+
 test('A3: after a failure the next engine in the chain gets the earlier error in L0', t => {
   const h = makeHarness(t);
   const cwd = workDir(h, 'fallback');
