@@ -1,27 +1,15 @@
 {
   "version": "1.2.0",
   "policy": "token_saver_offload",
-  "description": "Antigravity minimal token harcar; isler once OpenCode ucretsiz modellerine, sonra Muse Contributor ve Codex ucretsiz modellerine delege edilir.",
+  "description": "Antigravity minimal token harcar; isler once Vibe modellerine, sonra Muse Contributor modeline delege edilir.",
   "fallback_chain": [
-    {
-      "engine": "vibe",
-      "model": "vibe-glm-5.3-flash"
-    },
     {
       "engine": "vibe",
       "model": "vibe-glm-5.3"
     },
     {
-      "engine": "opencode",
-      "model": "deepseek-v4.1-flash-free"
-    },
-    {
-      "engine": "opencode",
-      "model": "mimo-v2.6-flash-free"
-    },
-    {
-      "engine": "opencode",
-      "model": "glm-5.3-flash-free"
+      "engine": "vibe",
+      "model": "vibe-glm-5.3-flash"
     },
     {
       "engine": "muse",
@@ -127,7 +115,7 @@
     },
     "vibe": {
       "type": "vibe_cli",
-      "default_model": "vibe-glm-5.3-flash",
+      "default_model": "vibe-glm-5.3",
       "complex_model": "vibe-glm-5.3",
       "models": {
         "vibe-glm-5.3-flash": {
@@ -318,10 +306,6 @@
     "description": "WrongStack tarzı karantina ve half-open probe mekanizması."
   },
   "routing_rules": {
-    "opencode_keywords": [
-      "opencode",
-      "open code"
-    ],
     "claude_keywords": [
       "claude"
     ],

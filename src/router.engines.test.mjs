@@ -75,13 +75,10 @@ syncBuiltinESMExports();
   assert.equal(sessions.free.sessionId, 'ses_Test123');
   assert.equal(sessions.cheap.sessionId, '123e4567-e89b-42d3-a456-426614174000');
 
-  result = run('--task', 'Use OpenCode for this task');
-  assert.equal(result.status, 0, result.stdout + result.stderr);
   result = run('--task', 'Use Claude for this task');
   assert.equal(result.status, 0, result.stdout + result.stderr);
   const routedCalls = fs.readFileSync(callsFile, 'utf8').trim().split('\n').map(JSON.parse);
-  assert.match(routedCalls[4].command, /--model opencode\/deepseek-v4\.1-flash-free/);
-  assert.match(routedCalls[5].command, /--model claude-haiku-5-5/);
+  assert.match(routedCalls[4].command, /--model claude-haiku-5-5/);
 
   result = run('--engine', 'claude', '--model', 'opus-5.5', '--name', 'opus', '--task', 'first opus turn');
   assert.equal(result.status, 0, result.stdout + result.stderr);
@@ -91,7 +88,7 @@ syncBuiltinESMExports();
   assert.equal(result.status, 0, result.stdout + result.stderr);
   result = run('--task', 'Use Opus 5.5 for this task');
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  const opusCalls = fs.readFileSync(callsFile, 'utf8').trim().split('\n').map(JSON.parse).slice(6);
+  const opusCalls = fs.readFileSync(callsFile, 'utf8').trim().split('\n').map(JSON.parse).slice(5);
   assert.equal(opusCalls.length, 4);
   for (const call of opusCalls) {
     assert.match(call.command, /--model claude-opus-5-5/);
@@ -112,7 +109,7 @@ syncBuiltinESMExports();
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /exceeds the configured cost ceiling/);
   }
-  assert.equal(fs.readFileSync(callsFile, 'utf8').trim().split('\n').length, 10);
+  assert.equal(fs.readFileSync(callsFile, 'utf8').trim().split('\n').length, 9);
 });
 
 test('Default routing walks the free chain and named models are honoured', t => {
