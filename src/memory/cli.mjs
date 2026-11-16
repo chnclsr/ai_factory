@@ -1,6 +1,8 @@
 // `node router.mjs memory <command>`: inspection and maintenance commands for the memory store.
 //
 //   memory session show [<alias|sid>]          turns, engines and changed files of a session
+//   memory state show|update [--session <s>] [--force]
+//                                               the model-written session state (phase 3)
 //   memory turn show <n> [--session <s>]        the full recorded request and reply of turn n
 //   memory turn diff <n> [--session <s>]        the patch recorded for turn n
 //   memory turn revert <n> [--session <s>] [--yes]
@@ -27,13 +29,15 @@ import { beginHandoff, claimHandoff, listHandoffs, isValidHandoffId } from './ha
 import { revertPatch } from './worktree.mjs';
 import { followMoves, describeProjects, renameProject, mergeProjects } from './projects.mjs';
 import { sanitizeValue, neutralizeForInjection } from './sanitize.mjs';
+import { readState, renderState, updateState } from './state.mjs';
+import path from 'node:path';
 
 function parseArgs(argv) {
   const positional = [];
   const flags = {};
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg === '--yes' || arg === '-y' || arg === '--global' || arg === '--all') flags[arg.replace(/^-+/, '')] = true;
+    if (arg === '--yes' || arg === '-y' || arg === '--global' || arg === '--all' || arg === '--force') flags[arg.replace(/^-+/, '')] = true;
     else if (arg.startsWith('--')) flags[arg.slice(2)] = argv[++i] ?? '';
     else positional.push(arg);
   }
@@ -65,7 +69,7 @@ function readMemoryConfig(configFile) {
   try { return JSON.parse(fs.readFileSync(configFile, 'utf8'))?.memory || {}; } catch { return {}; }
 }
 
-export async function runMemoryCli(argv, { repoDir, indexFile = null, configFile = null, cwd = process.cwd(), io: ioOverride } = {}) {
+export async function runMemoryCli(argv, { repoDir, indexFile = null, configFile = null, cwd = process.cwd(), io: ioOverride, routerScript = null } = {}) {
   const io = ioOverride || { out: s => process.stdout.write(s), err: s => process.stderr.write(s), isTTY: Boolean(process.stdin.isTTY) };
   const { positional, flags } = parseArgs(argv);
   const [group, action, arg] = positional;
@@ -120,6 +124,29 @@ export async function runMemoryCli(argv, { repoDir, indexFile = null, configFile
 
   // The pull path: the full recorded reply of one turn, read straight from git objects (no index),
   // so it works while the index is locked. Engines run it when the block shortened a turn.
+  // Session state (phase 3): `state show` prints it, `state update` asks the summariser engine for a
+  // new one. The router starts `state update` as a detached process after a turn when one is due.
+  if (group === 'state' && (action === 'show' || action === 'update')) {
+    const sid = pickSession(snapshot, flags.session || arg);
+    if (!sid) { io.err(`No session found in project ${project.key}.\n`); return 1; }
+    if (action === 'show') {
+      const state = readState(snapshot, sid);
+      if (!state) { io.out('(no state yet)\n'); return 0; }
+      io.out(`state of ${sid} through turn ${state.through_turn} (${state.engine}${state.model ? '/' + state.model : ''}, ${state.updated})\n`);
+      io.out(renderState(state, 100000).join('\n') + '\n');
+      return 0;
+    }
+    const memoryConfig = readMemoryConfig(configFile);
+    const number = (value, fallback) => (Number.isFinite(Number(value)) && Number(value) >= 0 ? Number(value) : fallback);
+    const result = updateState({
+      repoDir, projectKey: project.key, sid, cwd: workdir, routerScript: routerScript || path.resolve(import.meta.dirname, '..', '..', 'router.mjs'),
+      engine: flags.engine || memoryConfig.state_engine || 'vibe/vibe-glm-5.3-flash', dataDir: path.dirname(repoDir), force: Boolean(flags.force),
+      minTurns: number(memoryConfig.state_min_turns, 8), everyTurns: number(memoryConfig.state_every_turns, 6)
+    });
+    io.out(`state update: ${result.status}${result.items !== undefined ? `, ${result.items} item(s) through turn ${result.through}` : ''}${result.error ? ` (${result.error})` : ''}\n`);
+    return ['written', 'superseded', 'not_due', 'disabled', 'busy', 'no_turns'].includes(result.status) ? 0 : 1;
+  }
+
   if (group === 'turn' && action === 'show') {
     const n = Number(arg);
     const sid = pickSession(snapshot, flags.session);

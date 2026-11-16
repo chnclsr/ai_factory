@@ -287,11 +287,24 @@ export function scenarios() {
       live: { rubric: 'The answer gives the cache key HIDDEN-PULL-7 (found by reading the full turn), or says it must read the full turn to find it.' }
     },
     {
+      id: 'budget-pressure-state-en', category: 'budget-pressure', lang: 'en', gate: true,
+      turns: [
+        chat('claude', 'record the release codename', `${filler('en', 3)} The release codename is BITTERN-12.`),
+        ...workTurns('en', 39)
+      ],
+      state: { goal: 'prepare the release and its reports',
+        items: [{ type: 'decision', text: 'the release codename is BITTERN-12', turns: [1] }, { type: 'fact', text: 'reports 1-39 had their chart titles fixed', turns: [2, 40] }] },
+      probe: { engine: 'vibe', task: 'what is the release codename?' },
+      expect: { present: ['BITTERN-12', 'State of this conversation'] },
+      live: { rubric: 'The answer gives the codename BITTERN-12.' }
+    },
+    {
       id: 'budget-pressure-en', category: 'budget-pressure', lang: 'en', gate: false,
       turns: [
         chat('claude', 'record the release codename', `${filler('en', 3)} The release codename is BITTERN-12.`),
         ...workTurns('en', 39)
       ],
+      generateState: true,
       probe: { engine: 'vibe', task: 'what is the release codename?' },
       expect: { present: ['BITTERN-12'] },
       live: { rubric: 'The answer gives the codename BITTERN-12.' }

@@ -146,7 +146,7 @@ async function main() {
     const report = await runLive({
       scenarios: flag('--replay') ? null : select(scenarios()), replay: flag('--replay'),
       engines: (value('--engines') || 'vibe,muse,claude').split(','), runs: Number(value('--runs')) || 1,
-      judge: value('--judge'), settings: overrides(), log: line => console.log(line)
+      judge: value('--judge'), stateEngine: value('--state-engine'), settings: overrides(), log: line => console.log(line)
     });
     report.version = gitVersion();
     console.log(`report: ${writeReport('live', report)}`);

@@ -14,6 +14,7 @@ import { resolveProbeActions } from './scenarios.mjs';
 import { createMemory } from '../index.mjs';
 import { initFixtureRepo, commitAll } from '../test-helpers.mjs';
 import { estimateTokens } from '../pack.mjs';
+import { validateState, writeState } from '../state.mjs';
 
 const DEFAULT_PROBE_ENGINE = { engine: 'claude', model: 'haiku-5.5' };
 
@@ -157,6 +158,14 @@ export async function prepareScenario(h, scenario, { seedOnly = false } = {}) {
     seedTurn(memory, { cwd, session: sessionOf(turn), turn });
   }
   // A probe that names its engine does not inherit the default probe's model.
+  // A scenario can seed a model-written state, as the background updater would have stored it.
+  if (scenario.state) {
+    const sid = scenario.session || 'eval-session';
+    const seeded = (scenario.turns || []).filter(t => !t.handoff && sessionOf(t) === sid).length;
+    const state = validateState(scenario.state, { maxTurn: seeded, engine: 'seed', model: 'seed' });
+    if (!state) throw new Error('scenario.state is not a valid state');
+    writeState(h.repo, defaultProject, sid, state);
+  }
   const probe = scenario.probe?.engine ? { ...scenario.probe } : { ...DEFAULT_PROBE_ENGINE, ...scenario.probe };
   const cwd = projectDir(h, scenario, probe.project || defaultProject);
   const session = probe.session || scenario.session || 'eval-session';

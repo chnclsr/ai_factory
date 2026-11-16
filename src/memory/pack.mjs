@@ -14,6 +14,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { snapshotProject, snapshotRef, commitProject } from './store.mjs';
 import { readMeta, readTurns, engineSessionKey } from './session.mjs';
+import { readState, renderState } from './state.mjs';
 import { collectPages, collectTurns, terms, indexSearch } from './search.mjs';
 import { PERSONAL_REF } from './project.mjs';
 import { neutralizeForInjection } from './sanitize.mjs';
@@ -32,7 +33,12 @@ export const PACK_DEFAULTS = Object.freeze({
   // With a conversation budget, related items from other sessions get their own share.
   l2_tokens: 600,
   // 1: when a turn was shortened or left out, tell the engine how to fetch it (outside the block).
-  pull_hint: 1
+  pull_hint: 1,
+  // Phase 3: a model-written session state replaces the oldest raw turns once it exists.
+  // state_tokens caps its share of the conversation budget (0 ignores any stored state).
+  state_tokens: 500,
+  // Newest turns the state covers that stay in the block as raw lines too.
+  state_overlap: 2
 });
 
 // Marker left where a reply was shortened; the turn number lets the engine fetch the rest.
@@ -270,14 +276,22 @@ export function buildPack(req) {
   });
   // The conversation itself gets at least 60% of the budget: a fixed 400 tokens held about three
   // turns even on a 2000-token model, so longer sessions lost their earlier answers.
+  // Phase 3: with a stored state, the turns it covers (except the newest few) are in the state, so
+  // the raw lines go to what came after it. The state only helps while there are unseen turns.
+  const state = conversationBudget > 0 && settings.state_tokens > 0 && sessionTurns.length && req.sid ? readState(snapshot, req.sid) : null;
+  const stateLines = state ? renderState(state, Math.min(settings.state_tokens, Math.floor(conversationBudget * 0.4))) : [];
+  const coveredUpTo = stateLines.length ? Math.max(0, state.through_turn - settings.state_overlap) : 0;
+  const rawTurns = coveredUpTo ? sessionTurns.filter(t => t.n > coveredUpTo) : sessionTurns;
+  const stateTokens = stateLines.length ? estimateTokens(stateLines.join('\n')) + 30 : 0;
   const l1Fill = conversationBudget > 0
-    ? conversationLines(snapshot, sessionTurns, Math.min(conversationBudget, remaining), req.sid)
+    ? conversationLines(snapshot, rawTurns, Math.min(conversationBudget - stateTokens, remaining - stateTokens), req.sid)
     : fill(l1Candidates, Math.min(Math.max(settings.l1_tokens, Math.floor(budget * 0.6)), remaining));
   let conversationSection = null;
   if (l1Fill.kept.length) {
     const kept = [...l1Fill.kept].sort((a, b) => a.order - b.order);
     const engines = [...new Set(sessionTurns.map(t => t.engine))].join(', ');
     const omitted = l1Fill.omitted ? ` ${l1Fill.omitted} older turn(s) did not fit and are not shown.` : '';
+    const covered = stateLines.length ? sessionTurns.filter(t => t.n <= coveredUpTo).length : 0;
     // The new request continues this conversation. Without saying so, a follow-up like
     // "emin misin" or "devam et" read as a request with no subject and the engine asked what it meant.
     conversationSection = `This conversation so far, oldest first (${sessionTurns.length} turn(s) you have not seen; engines: ${engines}).${omitted} ` +
@@ -286,6 +300,7 @@ export function buildPack(req) {
       kept.map(c => c.line).join('\n');
     // Without a conversation budget the old order stays: the conversation before related items.
     if (!conversationBudget) sections.push(conversationSection);
+    if (covered) conversationSection = conversationSection.replace('\n- turn', `\n(Turns up to ${coveredUpTo} are condensed in the state above.)\n- turn`);
     remaining -= l1Fill.used + 12;
   }
 
@@ -336,9 +351,14 @@ export function buildPack(req) {
     l2Fill = fill(ranked, conversationBudget ? Math.min(settings.l2_tokens, remaining - 8) : remaining - 8);
     if (l2Fill.kept.length) sections.push('Related in this project:\n' + l2Fill.kept.map(c => c.line).join('\n'));
   }
-  // The newest turn goes last, next to the new request, so nothing after it competes for attention.
+  // The state first, then the conversation: the newest turn goes last, next to the new request.
+  const stateSection = stateLines.length
+    ? `State of this conversation through turn ${state.through_turn}, condensed by a model; every item names the turns it comes from, and a turn can be read in full if an item looks wrong.\n${stateLines.join('\n')}`
+    : null;
+  if (conversationBudget && stateSection) sections.push(stateSection);
   if (conversationBudget && conversationSection) sections.push(conversationSection);
   const injected = [...l0Fill.kept, ...l1Fill.kept, ...l2Fill.kept].map(c => c.source).filter(Boolean);
+  if (stateSection) injected.push({ kind: 'state', sid: req.sid, n: state.through_turn, seq: 0, hash: shortHash(stateLines.join('\n')) });
 
   let pack;
   if (!sections.length) {
@@ -353,8 +373,8 @@ export function buildPack(req) {
       // Trim from the oldest end when the conversation sits last, so the newest turn survives.
       text = conversationBudget ? `${header}\n\n…${body.slice(body.length - room)}\n${footer}` : `${header}\n\n${body.slice(0, room)}…\n${footer}`;
     }
-    const pull = conversationBudget && (l1Fill.shortened?.length || l1Fill.omittedTurns?.length)
-      ? { shortened: l1Fill.shortened, omitted: l1Fill.omittedTurns } : null;
+    const pull = conversationBudget && (l1Fill.shortened?.length || l1Fill.omittedTurns?.length || stateSection)
+      ? { shortened: l1Fill.shortened || [], omitted: l1Fill.omittedTurns || [], stateThrough: stateSection ? state.through_turn : 0 } : null;
     pack = { text, tokens: estimateTokens(text), budget, injected, knownSeq, headSeq, hash: shortHash(text), pull };
   }
   writeCache(req.cacheDir, key, pack);

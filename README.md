@@ -275,6 +275,8 @@ Before each attempt the engine's task file starts with a `<retrieved-memory untr
 | `max_pages` | `5` | Most related notes/turns in one block |
 | `conversation_tokens` | `1600` | Budget for the session's own turns, on top of the model's memory budget. A model's `memory_conversation_tokens` overrides it (4000 for Claude and Codex). `0` restores the old fixed-width lines |
 | `l2_tokens` | `600` | With a conversation budget: cap for related notes and turns from other sessions |
+| `state_every_turns` / `state_min_turns` | `8` / `12` | Background session state: once a session has `state_min_turns` turns and its stored state is `state_every_turns` behind, the router starts one helper call that condenses the conversation (`0` switches it off) |
+| `state_tokens` / `state_engine` | `500` / `vibe/vibe-glm-5.3-flash` | Share of the conversation budget the state may use (`0` ignores a stored state), and the cheap engine that writes it |
 | `pull_hint` | `1` | Add the `memory turn show` hint when a turn was shortened; `0` turns it off. An engine's `memory_pull: 0` turns it off for that engine |
 | `l0_tokens` / `l1_tokens` | `300` / `400` | Caps for the handoff/previous-error layer and, with `conversation_tokens: 0`, the session-turns layer |
 | `recent_turns_verbatim` | `3` | With `conversation_tokens: 0`: newest unseen turns shown with task and reply; older ones get one line |
@@ -313,6 +315,13 @@ node router.mjs memory handoff accept <id> --cwd <project>
 ```
 
 Each model entry in `engines.*.models` also has `memory_budget_tokens`: 800 for the free Vibe, OpenCode and Muse models, 2000 for Codex and Claude. Tokens are estimated as characters divided by 4; Turkish runs closer to 3 characters per token, so real counts are about a third higher.
+
+Session state: in a long conversation the oldest turns no longer fit the block. After a finished turn, when the session has at least `state_min_turns` turns and the stored state is `state_every_turns` behind, the router starts a detached helper (the call returns at once) that asks the cheap `state_engine` for a typed state note: goal, decisions, constraints, the latest answers with their key numbers and codes, dead ends, open questions, files and the next step. Every item cites the turns it comes from and is dropped otherwise, so `memory turn show <n>` can always check it. The block then shows the state followed by the turns after it (the newest two covered turns stay as raw lines) and says that older turns are condensed. The helper runs at depth 1 with `--no-memory`, so its call is never recorded or fed back, writes only if no newer state exists, and any failure leaves the plain block in charge. It costs one free-model call per `state_every_turns` turns beyond `state_min_turns`.
+
+```bash
+node router.mjs memory state show --session <sid> --cwd <project>
+node router.mjs memory state update --session <sid> --cwd <project> --force
+```
 
 The full recorded reply of any turn:
 

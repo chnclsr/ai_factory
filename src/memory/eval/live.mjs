@@ -34,7 +34,7 @@ function liveHarness(dir, mutateConfig) {
   const dataDir = path.join(dir, 'state');
   fs.mkdirSync(dataDir, { recursive: true });
   const config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
-  config.memory = { ...config.memory, auto_session_minutes: 0 };
+  config.memory = { ...config.memory, auto_session_minutes: 0, state_every_turns: 0 };
   if (mutateConfig) mutateConfig(config);
   const configFile = path.join(dir, 'router_config.json');
   fs.writeFileSync(configFile, JSON.stringify(config));
@@ -82,7 +82,7 @@ function loadReplays() {
   });
 }
 
-export async function runLive({ scenarios, replay = false, engines = ['vibe', 'muse', 'claude'], runs = 1, judge: judgeSpec, settings = {}, log = () => {} }) {
+export async function runLive({ scenarios, replay = false, engines = ['vibe', 'muse', 'claude'], runs = 1, judge: judgeSpec, stateEngine, settings = {}, log = () => {} }) {
   if (process.env.AI_FACTORY_LIVE !== '1') throw new Error('Set AI_FACTORY_LIVE=1 to run real engine CLIs.');
   const set = (replay ? loadReplays() : scenarios).filter(s => s.live?.rubric);
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-factory-live-eval-'));
@@ -100,13 +100,19 @@ export async function runLive({ scenarios, replay = false, engines = ['vibe', 'm
             // An entry may name a model too ("vibe/vibe-glm-5.3-flash"); otherwise the engine default runs.
             const [engineName, modelName] = engine.split('/');
             const args = ['--session', session, '--engine', engineName, ...(modelName ? ['--model', modelName] : []), '--no-fallback', '--cwd', cwd, '--task', probe.task];
+            // A scenario can ask for the real background state update first (one extra engine call).
+            let stateLine = '';
+            if (scenario.generateState) {
+              const upd = await runRouter(h, ['memory', 'state', 'update', '--session', session, '--cwd', cwd, '--force', '--engine', stateEngine || DEFAULT_JUDGE]);
+              stateLine = (upd.stdout.match(/^state update: .*$/m) || [upd.stderr.slice(-120)])[0];
+            }
             const result = await runRouter(h, args);
             const memoryLine = (result.stdout.match(/^memory: .*$/m) || [''])[0];
             const answer = lastReply(h, scenario.project || probe.project || 'eval', session);
             const rejected = REJECTION.test(answer);
             const graded = answer ? await judge({ judgeSpec: judgeSpec || DEFAULT_JUDGE, dir, question: probe.task, rubric: scenario.live.rubric, answer }) : { verdict: 'FAIL' };
             verdicts.push(graded.verdict);
-            detail.push({ run, verdict: graded.verdict, rejected, memoryLine, probeMs: result.ms, judgeMs: graded.ms,
+            detail.push({ run, verdict: graded.verdict, rejected, memoryLine, stateLine, probeMs: result.ms, judgeMs: graded.ms,
               answer: answer.replace(/\s+/g, ' ').slice(0, 300), exit: result.status });
           } catch (err) {
             verdicts.push('FAIL');

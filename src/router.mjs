@@ -494,6 +494,7 @@ function parseCliArgs() {
     model: '',
     quota: false,
     noFallback: false,
+    noMemory: false,
     reasoningEffort: '',
     session: '',
     project: '',
@@ -517,6 +518,9 @@ function parseCliArgs() {
       options.quota = true;
     } else if (arg === '--no-fallback') {
       options.noFallback = true;
+    } else if (arg === '--no-memory') {
+      // For the router's own helper calls (the session-state summariser): never read or record memory.
+      options.noMemory = true;
     } else if (arg === '--reasoning-effort' || arg === '--effort') {
       options.reasoningEffort = (args[++i] || '').toLowerCase().trim();
     } else if (arg === '--cwd') {
@@ -814,7 +818,7 @@ async function main() {
   // does not apply: an engine that runs `memory turn show` must get the turn, not a handoff report.
   if (process.argv[2] === 'memory') {
     const { runMemoryCli } = await import('./memory/cli.mjs');
-    process.exit(await runMemoryCli(process.argv.slice(3), { repoDir: MEMORY_REPO, indexFile: MEMORY_INDEX, configFile: CONFIG_FILE }));
+    process.exit(await runMemoryCli(process.argv.slice(3), { repoDir: MEMORY_REPO, indexFile: MEMORY_INDEX, configFile: CONFIG_FILE, routerScript: path.join(ROOT, 'router.mjs') }));
   }
 
   const depth = parseInt(process.env.AI_FACTORY_ROUTER_DEPTH || '0', 10);
@@ -859,7 +863,7 @@ Kullan\u0131m:
     process.exit(0);
   }
 
-  const memory = await loadMemory(config);
+  const memory = options.noMemory ? null : await loadMemory(config);
   const memoryCtx = memory ? memory.resolveSession({
     cwd: options.cwd, session: options.session, project: options.project, scope: options.scope,
     name: options.name, resume: options.resume, engine: options.engine, legacyRegistryFile: REGISTRY_FILE
@@ -1060,6 +1064,19 @@ Kullan\u0131m:
   console.log(`errors: ${errorsStr}`);
   console.log(`succeed_with: ${succeedStr}`);
   if (memoryResult?.handoffId) console.log(`handoff: ${memoryResult.handoffId}`);
+  // Phase 3: a long conversation gets its state note refreshed by a detached helper process, so
+  // this call returns at once. The helper runs at depth 1 and its engine call records no memory.
+  const stateJob = memory && succeedWith && succeedWith !== 'handoff_to_gemini' ? memory.stateJob(memoryCtx, memoryResult) : null;
+  if (stateJob) {
+    try {
+      const helper = spawn(process.execPath, stateJob.args, {
+        cwd: options.cwd, detached: true, stdio: 'ignore', windowsHide: true,
+        env: { ...process.env, AI_FACTORY_ROUTER_DEPTH: '1' }
+      });
+      helper.on('error', () => {});
+      helper.unref();
+    } catch {}
+  }
   if (memory) console.log(memory.reportLine(memoryCtx, memoryResult));
   console.log('='.repeat(60) + '\n');
 

@@ -1,10 +1,10 @@
 {
-  "version": "4aff40d",
-  "date": "2026-11-16T08:21:31.033Z",
+  "version": "0060506",
+  "date": "2026-11-16T10:02:20.158Z",
   "summary": {
-    "scenarios": 24,
-    "passed": 22,
-    "coverage": 0.917,
+    "scenarios": 25,
+    "passed": 23,
+    "coverage": 0.92,
     "gatedCoverage": 1,
     "overBudget": 0,
     "byCategory": {
@@ -89,9 +89,9 @@
         "coverage": 1
       },
       "budget-pressure": {
-        "scenarios": 1,
-        "passed": 0,
-        "coverage": 0
+        "scenarios": 2,
+        "passed": 1,
+        "coverage": 0.5
       }
     }
   },
@@ -253,6 +253,13 @@
     {
       "id": "pull-hint-en",
       "category": "pull",
+      "gate": true,
+      "pass": true,
+      "coverage": 1
+    },
+    {
+      "id": "budget-pressure-state-en",
+      "category": "budget-pressure",
       "gate": true,
       "pass": true,
       "coverage": 1

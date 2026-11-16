@@ -4,9 +4,17 @@ Extends `docs/memory-plan.md` (the memory layer itself).
 
 ## Status (2026-11-16)
 
-Shipped: H1-H5 (layer 1, live layer with judge, replay, threshold sweep), Phase 0, Phase 1, Phase 2,
-and the rule-file fix (section 6). Phase 3 and Phase 4 are not started: the numbers below do not
-call for them yet.
+Shipped: H1-H5 (layer 1, live layer with judge, replay, threshold sweep), Phases 0, 1, 2 and 3,
+and the rule-file fix (section 6). Phase 4 is deliberately not built: no scenario shows a need for
+a link graph or summaries of summaries.
+
+Phase 3 was built because the 40-turn budget-pressure scenario still failed at 1600 tokens (the
+plan's condition). With a stored state the block for that case is 421 tokens instead of 1758 and
+carries the buried codename; with the real background helper, vibe flash wrote a 4-item state in
+one call and both vibe flash and muse answered correctly. Defaults: `state_min_turns` 12,
+`state_every_turns` 8, so conversations that fit the budget never spend a call. Also changed
+afterwards: the router's default vibe model is now `vibe-glm-5.3-flash` (the CLI no longer serves
+`glm-5-3`).
 
 | Measurement | Before | After |
 |---|---|---|

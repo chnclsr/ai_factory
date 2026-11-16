@@ -95,7 +95,7 @@ export function createHarness(dir, { config } = {}) {
   const writeConfig = mutate => {
     const next = structuredClone(baseConfig);
     // Under a parallel test run git spawns can take seconds; the product default stays 2 s.
-    next.memory = { ...next.memory, file_budget_ms: 30000, auto_session_minutes: 0 };
+    next.memory = { ...next.memory, file_budget_ms: 30000, auto_session_minutes: 0, state_every_turns: 0 };
     if (mutate) mutate(next);
     fs.writeFileSync(configFile, JSON.stringify(next));
   };

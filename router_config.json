@@ -292,7 +292,11 @@
       "enabled": false
     },
     "conversation_tokens": 1600,
-    "l2_tokens": 600
+    "l2_tokens": 600,
+    "state_every_turns": 8,
+    "state_min_turns": 12,
+    "state_tokens": 500,
+    "state_engine": "vibe/vibe-glm-5.3-flash"
   },
   "watchdog": {
     "initial_timeout_ms": 30000,

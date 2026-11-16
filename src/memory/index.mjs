@@ -13,6 +13,7 @@ import { migrateRegistry } from './migrate.mjs';
 import { SCOPES } from './search.mjs';
 import { buildPack, buildPrompt as buildPackedPrompt, PACK_DEFAULTS } from './pack.mjs';
 import { vectorSettings } from './vector.mjs';
+import { stateDue } from './state.mjs';
 import { newHandoffId, writeHandoff, acceptInView } from './handoff.mjs';
 import path from 'node:path';
 
@@ -25,7 +26,11 @@ export const DEFAULT_MEMORY_CONFIG = Object.freeze({
   index: true,
   // A call with no --name/--resume/--session continues this project's most recent session when
   // that session was active within this many minutes. 0 starts a new session every time.
-  auto_session_minutes: 0
+  auto_session_minutes: 0,
+  // Phase 3: after a turn, start a background state update when the session has at least
+  // state_min_turns turns and the stored state is state_every_turns behind. 0 switches it off.
+  state_every_turns: 0,
+  state_min_turns: 8
 });
 
 // The router's own note, written outside the untrusted block, telling the engine how to read a
@@ -35,6 +40,7 @@ export function pullHint(pull, { routerScript, sid, cwd }) {
   const parts = [];
   if (pull.shortened?.length) parts.push(`shortened: turn ${pull.shortened.join(', ')}`);
   if (pull.omitted?.length) parts.push(`not shown: turn ${pull.omitted.join(', ')}`);
+  if (pull.stateThrough) parts.push(`state items cite turns up to ${pull.stateThrough}`);
   if (!parts.length) return '';
   const quote = value => JSON.stringify(String(value));
   return `[AI Factory] Some earlier replies in this conversation are not shown in full (${parts.join('; ')}). ` +
@@ -176,7 +182,25 @@ export function createMemory({ repoDir, dataDir, indexFile = null, memoryConfig 
     });
   }
 
-  return { settings, resolveSession, buildPrompt, recordTurn, reportLine, repoDir, dataDir, indexFile };
+  // After a finished turn: the arguments of the detached `memory state update` process when the
+  // conversation is long enough and its state is stale, else null. Depth 0 only, so helper calls
+  // (the summariser itself) never start more of them; memory.state_every_turns 0 switches it off.
+  function stateJob(ctx, result, { ok = true } = {}) {
+    try {
+      if (!ok || !routerScript || !ctx || ctx.missing || !result?.n) return null;
+      const everyTurns = Number(settings.state_every_turns);
+      const minTurns = Number(settings.state_min_turns);
+      if (!(everyTurns > 0)) return null;
+      if (Number.parseInt(env.AI_FACTORY_ROUTER_DEPTH || '0', 10) > 0) return null;
+      if (!stateDue({ repoDir, projectKey: ctx.project.key, sid: ctx.sid, turn: result.n, minTurns: Number.isFinite(minTurns) ? minTurns : 8, everyTurns })) return null;
+      return { args: [routerScript, 'memory', 'state', 'update', '--session', ctx.sid, '--cwd', ctx.cwd] };
+    } catch (err) {
+      warn(`stateJob failed: ${String(err?.message || err).split('\n')[0]}`);
+      return null;
+    }
+  }
+
+  return { settings, resolveSession, buildPrompt, recordTurn, reportLine, stateJob, repoDir, dataDir, indexFile };
 }
 
 const PACK_STATUS_TEXT = {
@@ -201,7 +225,7 @@ export function reportLine(ctx, result, env = process.env) {
     if (ctx.injectedPack) {
       const counts = {};
       for (const item of ctx.injected || []) counts[item.kind] = (counts[item.kind] || 0) + 1;
-      const label = { turn: 'turn(s)', page: 'note(s)', handoff: 'handoff(s)' };
+      const label = { turn: 'turn(s)', page: 'note(s)', handoff: 'handoff(s)', state: 'state' };
       const what = Object.entries(counts).map(([kind, n]) => `${n} ${label[kind] || kind}`).join(' + ') || 'context';
       parts.push(`injected=${what} (~${ctx.injectedPack.tokens}/${ctx.injectedPack.budget} tokens)`);
     } else {
