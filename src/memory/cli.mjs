@@ -132,6 +132,11 @@ export async function runMemoryCli(argv, { repoDir, indexFile = null, configFile
   // Antigravity's own turn, from its transcript (started by the plugin's Stop hook).
   if (group === 'record-agy') {
     const result = recordAgyTurn({ repoDir, transcriptPath: flags.transcript, sid: flags.session, cwd: workdir, model: flags.model });
+    // The Stop hook runs this detached with no console, so each run leaves one line to check later.
+    try {
+      fs.appendFileSync(path.join(path.dirname(repoDir), 'agy-record.log'),
+        `${new Date().toISOString()} ${String(flags.session || '-').slice(0, 40)} ${project.key} ${result.status}${result.n ? ` turn ${result.n}` : ''}\n`);
+    } catch {}
     io.out(`record-agy: ${result.status}${result.n ? ` (turn ${result.n})` : ''}\n`);
     return ['recorded', 'duplicate', 'routed', 'no_exchange'].includes(result.status) ? 0 : 1;
   }
