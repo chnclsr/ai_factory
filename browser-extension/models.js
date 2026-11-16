@@ -2,7 +2,7 @@
 var AI_FACTORY_MODELS = {
   "engines": {
     "vibe": {
-      "default": "vibe-glm-5.3",
+      "default": "vibe-glm-5.3-flash",
       "effort": [],
       "models": [
         "vibe-glm-5.3-flash",
@@ -35,8 +35,8 @@ var AI_FACTORY_MODELS = {
     }
   },
   "chain": [
-    "vibe/vibe-glm-5.3",
     "vibe/vibe-glm-5.3-flash",
+    "vibe/vibe-glm-5.3",
     "muse/muse-spark-1.3-contributor"
   ]
 };

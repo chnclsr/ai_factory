@@ -5,11 +5,11 @@
   "fallback_chain": [
     {
       "engine": "vibe",
-      "model": "vibe-glm-5.3"
+      "model": "vibe-glm-5.3-flash"
     },
     {
       "engine": "vibe",
-      "model": "vibe-glm-5.3-flash"
+      "model": "vibe-glm-5.3"
     },
     {
       "engine": "muse",
@@ -115,8 +115,8 @@
     },
     "vibe": {
       "type": "vibe_cli",
-      "default_model": "vibe-glm-5.3",
-      "complex_model": "vibe-glm-5.3",
+      "default_model": "vibe-glm-5.3-flash",
+      "complex_model": "vibe-glm-5.3-flash",
       "models": {
         "vibe-glm-5.3-flash": {
           "id": "zai-glm-5-3-flash",
