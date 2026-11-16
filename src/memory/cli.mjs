@@ -1,6 +1,7 @@
 // `node router.mjs memory <command>`: inspection and maintenance commands for the memory store.
 //
 //   memory session show [<alias|sid>]          turns, engines and changed files of a session
+//   memory turn show <n> [--session <s>]        the full recorded request and reply of turn n
 //   memory turn diff <n> [--session <s>]        the patch recorded for turn n
 //   memory turn revert <n> [--session <s>] [--yes]
 //                                               reverse turn n's patch in the working tree
@@ -25,7 +26,7 @@ import { vectorSettings } from './vector.mjs';
 import { beginHandoff, claimHandoff, listHandoffs, isValidHandoffId } from './handoff.mjs';
 import { revertPatch } from './worktree.mjs';
 import { followMoves, describeProjects, renameProject, mergeProjects } from './projects.mjs';
-import { sanitizeValue } from './sanitize.mjs';
+import { sanitizeValue, neutralizeForInjection } from './sanitize.mjs';
 
 function parseArgs(argv) {
   const positional = [];
@@ -114,6 +115,26 @@ export async function runMemoryCli(argv, { repoDir, indexFile = null, configFile
       io.out(`- turn ${turn.n} seq ${turn.seq} ${turn.engine}/${turn.model} ${turn.ok ? 'ok' : 'fail'}: ${String(turn.task).slice(0, 100)}\n`);
       io.out(describeFiles(turn.files) + '\n');
     }
+    return 0;
+  }
+
+  // The pull path: the full recorded reply of one turn, read straight from git objects (no index),
+  // so it works while the index is locked. Engines run it when the block shortened a turn.
+  if (group === 'turn' && action === 'show') {
+    const n = Number(arg);
+    const sid = pickSession(snapshot, flags.session);
+    if (!Number.isInteger(n) || n < 1 || !sid) { io.err('Usage: memory turn show <n> [--session <alias|sid>] [--cwd <dir>] [--max-bytes <n>]\n'); return 1; }
+    const turn = readTurns(snapshot, sid).find(t => t.kind === 'turn' && t.n === n);
+    if (!turn) { io.err(`Turn ${n} not found in session ${sid}.\n`); return 1; }
+    let reply = (turn.response_ref && snapshot.read(turn.response_ref)) || turn.response_head || '';
+    const maxBytes = Number(flags['max-bytes']);
+    if (Number.isFinite(maxBytes) && maxBytes > 0 && Buffer.byteLength(reply) > maxBytes) {
+      reply = Buffer.from(reply).subarray(0, maxBytes).toString('utf8').replace(/�+$/, '') + `\n[… truncated at ${maxBytes} bytes]`;
+    }
+    io.out(`turn ${n} (${turn.engine}/${turn.model}${turn.ok ? '' : ', failed'}) in session ${sid}\n`);
+    io.out(`request: ${neutralizeForInjection(String(turn.task || ''))}\n`);
+    io.out(`reply:\n${neutralizeForInjection(reply)}\n`);
+    if (Array.isArray(turn.files) && turn.files.length) io.out(`files:\n${describeFiles(turn.files)}\n`);
     return 0;
   }
 
@@ -239,7 +260,7 @@ export async function runMemoryCli(argv, { repoDir, indexFile = null, configFile
     return 0;
   }
 
-  io.err('Usage: node router.mjs memory session show [<alias|sid>] | session adopt <alias> | turn diff <n> | turn revert <n> [--yes]\n' +
+  io.err('Usage: node router.mjs memory session show [<alias|sid>] | session adopt <alias> | turn show <n> | turn diff <n> | turn revert <n> [--yes]\n' +
     '       | note add <text> [--scope repo|mine] | search <query> [--scope repo|dir|mine] [--global]\n' +
     '       | project list | project rename <old> <new> [--yes] | project merge <source> <target> [--yes]\n' +
     '       | handoff begin --to <engine|any> [--task <text>] | handoff list [--all] | handoff accept <hid>\n');

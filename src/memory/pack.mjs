@@ -30,7 +30,9 @@ export const PACK_DEFAULTS = Object.freeze({
   // 0 keeps the old fixed-width L1 lines. A model's memory_conversation_tokens overrides it.
   conversation_tokens: 0,
   // With a conversation budget, related items from other sessions get their own share.
-  l2_tokens: 600
+  l2_tokens: 600,
+  // 1: when a turn was shortened or left out, tell the engine how to fetch it (outside the block).
+  pull_hint: 1
 });
 
 // Marker left where a reply was shortened; the turn number lets the engine fetch the rest.
@@ -66,6 +68,8 @@ function conversationLines(snapshot, turns, budget, sid) {
   const kept = [];
   let remaining = budget;
   let omitted = 0;
+  const shortened = [];
+  const omittedTurns = [];
   for (const turn of [...turns].reverse()) {
     const files = describeFiles(turn.files);
     const label = `- turn ${turn.n} (${turn.engine}/${turn.model}${turn.ok ? '' : ', failed'}): ${clip(turn.task, 300)}`;
@@ -76,18 +80,19 @@ function conversationLines(snapshot, turns, budget, sid) {
     let line = null;
     if (allowance - fixed >= 40) {
       const body = shortenMiddle(reply, (allowance - fixed) * 4, turn.n);
+      if (body !== reply) shortened.push(turn.n);
       line = `${label}\n  reply:\n${body.split('\n').map(l => `  ${l}`).join('\n')}${files ? `\n  ${files}` : ''}`;
     } else {
       const compact = `- turn ${turn.n} (${turn.engine}): ${clip(turn.task, 80)} → ${clip(reply, 120)}`;
-      if (estimateTokens(compact) + 1 <= remaining) line = compact;
+      if (estimateTokens(compact) + 1 <= remaining) { line = compact; if (reply.length > 120) shortened.push(turn.n); }
     }
-    if (!line) { omitted++; continue; }
+    if (!line) { omitted++; omittedTurns.push(turn.n); continue; }
     const cost = estimateTokens(line) + 1;
     remaining -= cost;
     kept.push({ line, order: turn.n, source });
   }
   kept.sort((a, b) => a.order - b.order);
-  return { kept, used: budget - remaining, omitted };
+  return { kept, used: budget - remaining, omitted, shortened: shortened.sort((a, b) => a - b), omittedTurns: omittedTurns.sort((a, b) => a - b) };
 }
 
 const CACHE_LIMIT = 256;
@@ -116,8 +121,10 @@ export function shortHash(text) {
 
 // The pure joining step the plan names buildPrompt(task, pack): the pack goes first and the task
 // stays byte for byte what the user wrote.
-export function buildPrompt(task, pack) {
-  return pack && pack.text ? `${pack.text}\n\nNew request:\n${task}` : task;
+// `hint` is the router's own line (never recorded content), so it goes outside the untrusted block.
+export function buildPrompt(task, pack, hint = '') {
+  if (!pack || !pack.text) return task;
+  return `${pack.text}\n\n${hint ? `${hint}\n\n` : ''}New request:\n${task}`;
 }
 
 export function budgetFor(routerConfig, engine, model, settings = PACK_DEFAULTS) {
@@ -346,7 +353,9 @@ export function buildPack(req) {
       // Trim from the oldest end when the conversation sits last, so the newest turn survives.
       text = conversationBudget ? `${header}\n\n…${body.slice(body.length - room)}\n${footer}` : `${header}\n\n${body.slice(0, room)}…\n${footer}`;
     }
-    pack = { text, tokens: estimateTokens(text), budget, injected, knownSeq, headSeq, hash: shortHash(text) };
+    const pull = conversationBudget && (l1Fill.shortened?.length || l1Fill.omittedTurns?.length)
+      ? { shortened: l1Fill.shortened, omitted: l1Fill.omittedTurns } : null;
+    pack = { text, tokens: estimateTokens(text), budget, injected, knownSeq, headSeq, hash: shortHash(text), pull };
   }
   writeCache(req.cacheDir, key, pack);
   return { ...pack, cache: 'miss' };

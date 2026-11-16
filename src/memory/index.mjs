@@ -28,7 +28,20 @@ export const DEFAULT_MEMORY_CONFIG = Object.freeze({
   auto_session_minutes: 0
 });
 
-export function createMemory({ repoDir, dataDir, indexFile = null, memoryConfig = {}, routerConfig = {}, env = process.env, log = console.warn }) {
+// The router's own note, written outside the untrusted block, telling the engine how to read a
+// turn the block shortened or left out. `node` from PATH works in every shell the engines use.
+export function pullHint(pull, { routerScript, sid, cwd }) {
+  if (!pull || !routerScript) return '';
+  const parts = [];
+  if (pull.shortened?.length) parts.push(`shortened: turn ${pull.shortened.join(', ')}`);
+  if (pull.omitted?.length) parts.push(`not shown: turn ${pull.omitted.join(', ')}`);
+  if (!parts.length) return '';
+  const quote = value => JSON.stringify(String(value));
+  return `[AI Factory] Some earlier replies in this conversation are not shown in full (${parts.join('; ')}). ` +
+    `If the request needs one, read it with: node ${quote(routerScript)} memory turn show <n> --session ${sid} --cwd ${quote(cwd)}`;
+}
+
+export function createMemory({ repoDir, dataDir, indexFile = null, memoryConfig = {}, routerConfig = {}, env = process.env, log = console.warn, routerScript = null }) {
   const settings = { ...DEFAULT_MEMORY_CONFIG, ...memoryConfig };
   const packSettings = Object.fromEntries(Object.keys(PACK_DEFAULTS)
     .map(k => [k, Number.isFinite(settings[k]) ? settings[k] : PACK_DEFAULTS[k]]));
@@ -125,7 +138,10 @@ export function createMemory({ repoDir, dataDir, indexFile = null, memoryConfig 
       ctx.packStatus = pack.text ? null
         : pack.gated === 'up_to_date' && !pack.headSeq ? 'empty'
         : (pack.gated || 'nothing_relevant');
-      return buildPackedPrompt(task, pack);
+      // An engine can switch the hint off (memory_pull: 0) when it has no shell or rejects it.
+      const pullOn = (routerConfig?.engines?.[request.engine]?.memory_pull ?? packSettings.pull_hint) !== 0;
+      ctx.pull = pack.text ? pack.pull || null : null;
+      return buildPackedPrompt(task, pack, pullOn ? pullHint(pack.pull, { routerScript, sid: ctx.sid, cwd: ctx.cwd }) : '');
     });
   }
 

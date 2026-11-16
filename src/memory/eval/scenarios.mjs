@@ -276,6 +276,17 @@ export function scenarios() {
       expect: { present: ['ŞAHİN-5'] }
     },
     {
+      id: 'pull-hint-en', category: 'pull', lang: 'en', gate: true,
+      turns: [
+        chat('vibe', 'write the full design document',
+          `Opening. ${'Detail line. '.repeat(1500)}Buried fact: the cache key is HIDDEN-PULL-7. ${'More detail. '.repeat(1500)}Closing summary: ship behind a flag (TAIL-99).`),
+        ...smallTalk('en', 1)
+      ],
+      probe: { engine: 'vibe', task: 'what is the cache key in the design?' },
+      expect: { present: ['memory turn show', 'TAIL-99'] },
+      live: { rubric: 'The answer gives the cache key HIDDEN-PULL-7 (found by reading the full turn), or says it must read the full turn to find it.' }
+    },
+    {
       id: 'budget-pressure-en', category: 'budget-pressure', lang: 'en', gate: false,
       turns: [
         chat('claude', 'record the release codename', `${filler('en', 3)} The release codename is BITTERN-12.`),

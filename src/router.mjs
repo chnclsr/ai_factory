@@ -799,7 +799,8 @@ async function loadMemory(config) {
   if (config?.memory?.enabled !== true) return null;
   try {
     const { createMemory } = await import('./memory/index.mjs');
-    return createMemory({ repoDir: MEMORY_REPO, dataDir: DATA_DIR, indexFile: MEMORY_INDEX, memoryConfig: config.memory, routerConfig: config });
+    return createMemory({ repoDir: MEMORY_REPO, dataDir: DATA_DIR, indexFile: MEMORY_INDEX, memoryConfig: config.memory, routerConfig: config,
+      routerScript: path.join(ROOT, 'router.mjs') });
   } catch (err) {
     console.warn('[AI Factory Memory] disabled for this call: ' + (err?.message || err));
     return null;
@@ -809,6 +810,13 @@ async function loadMemory(config) {
 // \u2500\u2500 Main Entrypoint \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
 async function main() {
+  // Memory commands only read or write the store and never start an engine, so the recursion guard
+  // does not apply: an engine that runs `memory turn show` must get the turn, not a handoff report.
+  if (process.argv[2] === 'memory') {
+    const { runMemoryCli } = await import('./memory/cli.mjs');
+    process.exit(await runMemoryCli(process.argv.slice(3), { repoDir: MEMORY_REPO, indexFile: MEMORY_INDEX, configFile: CONFIG_FILE }));
+  }
+
   const depth = parseInt(process.env.AI_FACTORY_ROUTER_DEPTH || '0', 10);
   if (Number.isSafeInteger(depth) && depth >= 2) {
     console.warn(`\n[AI Factory Recursion Guard] AI_FACTORY_ROUTER_DEPTH=${depth} s\u0131n\u0131r\u0131na ula\u015f\u0131ld\u0131. \u0130\u00e7 i\u00e7e d\u00f6ng\u00fc engellendi. G\u00f6rev Gemini'ye devrediliyor.\n`);
@@ -820,11 +828,6 @@ async function main() {
     console.log('succeed_with: handoff_to_gemini');
     console.log('='.repeat(60) + '\n');
     process.exit(0);
-  }
-
-  if (process.argv[2] === 'memory') {
-    const { runMemoryCli } = await import('./memory/cli.mjs');
-    process.exit(await runMemoryCli(process.argv.slice(3), { repoDir: MEMORY_REPO, indexFile: MEMORY_INDEX, configFile: CONFIG_FILE }));
   }
 
   const options = parseCliArgs();

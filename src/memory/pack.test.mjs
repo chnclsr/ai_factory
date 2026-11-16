@@ -224,3 +224,33 @@ test('conversation budget: a long answer behind short turns survives, newest tur
   const old = memoryBlock(h.lastCall().prompt);
   assert.doesNotMatch(old, /KESTREL-41/, 'conversation_tokens 0 keeps the old clipped lines');
 });
+
+test('pull path: a shortened turn gets a hint outside the block, and turn show returns it in full even when nested', t => {
+  const h = makeHarness(t);
+  const cwd = workDir(h, 'pull');
+  const vibe = ['--engine', 'vibe', '--no-fallback', '--session', 'pull', '--cwd', cwd];
+  const huge = 'Opening. ' + 'Detail line. '.repeat(1500) + 'Buried fact: the cache key is HIDDEN-PULL-7. ' + 'More detail. '.repeat(1500) + 'Closing.';
+  assert.equal(h.run([...vibe, '--task', 'write the full design document'], { actions: { response: huge } }).status, 0);
+  assert.equal(h.run([...vibe, '--task', 'what is the cache key in the design?']).status, 0);
+  const prompt = h.lastCall().prompt;
+  const block = memoryBlock(prompt);
+  assert.doesNotMatch(block, /HIDDEN-PULL-7/, 'the middle of a 40 KB reply does not fit');
+  assert.match(block, /characters skipped, full reply: turn 1/);
+  const hint = prompt.slice(prompt.indexOf('</retrieved-memory>'));
+  const command = hint.match(/memory turn show <n> --session (\S+) --cwd ("[^"]+")/);
+  assert.ok(command, hint.slice(0, 400));
+  assert.equal(command[1], 'pull');
+
+  for (const depth of ['0', '2']) {
+    const shown = h.run(['memory', 'turn', 'show', '1', '--session', 'pull', '--cwd', JSON.parse(command[2])], { extraEnv: { AI_FACTORY_ROUTER_DEPTH: depth } });
+    assert.equal(shown.status, 0, shown.stderr);
+    assert.match(shown.stdout, /HIDDEN-PULL-7/, `depth ${depth}`);
+    assert.doesNotMatch(shown.stdout, /handoff_to_gemini/);
+  }
+  const limited = h.run(['memory', 'turn', 'show', '1', '--session', 'pull', '--cwd', cwd, '--max-bytes', '100']);
+  assert.match(limited.stdout, /truncated at 100 bytes/);
+
+  h.writeConfig(cfg => { cfg.engines.vibe.memory_pull = 0; });
+  assert.equal(h.run([...vibe, '--task', 'and the cache key again?']).status, 0);
+  assert.doesNotMatch(h.lastCall().prompt, /memory turn show/, 'memory_pull 0 switches the hint off');
+});
