@@ -29,6 +29,8 @@ const plainTurn = (request, answer, start = 0) => [
 
 test('transcript parsing: request without wrapper, final answer, routed turns detected', () => {
   assert.equal(cleanRequest('<USER_REQUEST>\nhello there\n</USER_REQUEST>\n<ADDITIONAL_METADATA>x</ADDITIONAL_METADATA>'), 'hello there');
+  assert.equal(cleanRequest('<USER_REQUEST>\n[AI Factory off] Do not use the AI Factory router or any delegation; do the task yourself. Task: tekrar kontrol et\n</USER_REQUEST>'), 'tekrar kontrol et');
+  assert.equal(cleanRequest('<USER_REQUEST>plain request mentioning Task: inside</USER_REQUEST>'), 'plain request mentioning Task: inside');
   const steps = parseTranscript(transcript([...plainTurn('first', 'answer one'), ...plainTurn('second question', 'answer two (OWL-9)', 10), 'not json']));
   const last = lastExchange(steps);
   assert.deepEqual([last.step, last.request, last.answer, last.routed], [10, 'second question', 'answer two (OWL-9)', false]);

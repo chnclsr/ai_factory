@@ -27,7 +27,11 @@ export function parseTranscript(text) {
 export function cleanRequest(content) {
   const text = String(content || '');
   const match = text.match(/<USER_REQUEST>\s*([\s\S]*?)\s*<\/USER_REQUEST>/);
-  return (match ? match[1] : text.replace(/<([A-Z_]+)>[\s\S]*?<\/\1>/g, '')).trim();
+  const request = (match ? match[1] : text.replace(/<([A-Z_]+)>[\s\S]*?<\/\1>/g, '')).trim();
+  // The browser extension puts "[AI Factory off] Do not use the router ... Task: " in front of the
+  // user's words; the recorded request is what the user typed.
+  const tagged = request.match(/^\[AI Factory[^\]]*\][\s\S]*?\bTask:\s*([\s\S]+)$/);
+  return (tagged ? tagged[1] : request).trim();
 }
 
 const callText = call => JSON.stringify(call?.args || {});
