@@ -42,7 +42,10 @@ const ids = ${JSON.stringify(FAKE_SESSION_IDS)};
 const fileMatch = command.match(/--prompt-file "([^"]+)"/) || command.match(/--file "([^"]+)"/) || command.match(/< "([^"]+)"/);
 const prompt = fileMatch ? fs.readFileSync(fileMatch[1], 'utf8') : '';
 const model = (command.match(/--model (\\S+)/) || command.match(/ -m (\\S+)/) || [])[1] || null;
-const actions = JSON.parse(process.env.AI_FACTORY_FAKE_ACTIONS || '{}');
+// Large scripted replies exceed the Windows environment limit (32 KB), so they can come from a file.
+const actions = process.env.AI_FACTORY_FAKE_ACTIONS_FILE
+  ? JSON.parse(fs.readFileSync(process.env.AI_FACTORY_FAKE_ACTIONS_FILE, 'utf8'))
+  : JSON.parse(process.env.AI_FACTORY_FAKE_ACTIONS || '{}');
 const perEngine = (actions.byEngine && actions.byEngine[engine]) || {};
 fs.appendFileSync(process.env.AI_FACTORY_FAKE_CALLS, JSON.stringify({ engine, model, command, prompt, cwd: process.cwd() }) + '\\n');
 if ((actions.fail || []).includes(model) || (actions.fail || []).includes(engine)) {
@@ -76,7 +79,11 @@ syncBuiltinESMExports();
 `;
 
 export function makeHarness(t, { config } = {}) {
-  const dir = tempDir(t, 'ai-factory-mem-');
+  return createHarness(tempDir(t, 'ai-factory-mem-'), { config });
+}
+
+// The same harness in a caller-owned directory (the eval runner manages its own temp dirs).
+export function createHarness(dir, { config } = {}) {
   const mock = path.join(dir, 'mock.mjs');
   const preload = path.join(dir, 'preload.mjs');
   const callsFile = path.join(dir, 'calls.jsonl');
@@ -106,6 +113,7 @@ export function makeHarness(t, { config } = {}) {
   return {
     dir,
     dataDir,
+    env,
     repo: path.join(dataDir, 'memory.git'),
     configFile,
     writeConfig,

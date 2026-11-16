@@ -1,0 +1,256 @@
+{
+  "version": "4d2b7ea",
+  "date": "2026-11-16T08:10:28.566Z",
+  "summary": {
+    "scenarios": 23,
+    "passed": 13,
+    "coverage": 0.565,
+    "gatedCoverage": 0.632,
+    "overBudget": 0,
+    "byCategory": {
+      "followup": {
+        "scenarios": 5,
+        "passed": 0,
+        "coverage": 0
+      },
+      "capture": {
+        "scenarios": 1,
+        "passed": 0,
+        "coverage": 0
+      },
+      "session-recall": {
+        "scenarios": 1,
+        "passed": 0,
+        "coverage": 0
+      },
+      "cross-engine": {
+        "scenarios": 1,
+        "passed": 1,
+        "coverage": 1
+      },
+      "cross-session": {
+        "scenarios": 2,
+        "passed": 1,
+        "coverage": 0.5
+      },
+      "knowledge-update": {
+        "scenarios": 1,
+        "passed": 1,
+        "coverage": 1
+      },
+      "abstention": {
+        "scenarios": 1,
+        "passed": 1,
+        "coverage": 1
+      },
+      "isolation": {
+        "scenarios": 1,
+        "passed": 1,
+        "coverage": 1
+      },
+      "instruction-persistence": {
+        "scenarios": 1,
+        "passed": 0,
+        "coverage": 0
+      },
+      "constraint-retention": {
+        "scenarios": 1,
+        "passed": 1,
+        "coverage": 1
+      },
+      "dead-end": {
+        "scenarios": 1,
+        "passed": 1,
+        "coverage": 1
+      },
+      "handoff": {
+        "scenarios": 1,
+        "passed": 1,
+        "coverage": 1
+      },
+      "file-diff": {
+        "scenarios": 1,
+        "passed": 1,
+        "coverage": 1
+      },
+      "error-recovery": {
+        "scenarios": 1,
+        "passed": 1,
+        "coverage": 1
+      },
+      "robustness": {
+        "scenarios": 3,
+        "passed": 3,
+        "coverage": 1
+      },
+      "budget-pressure": {
+        "scenarios": 1,
+        "passed": 0,
+        "coverage": 0
+      }
+    }
+  },
+  "results": [
+    {
+      "id": "followup-sure-tr",
+      "category": "followup",
+      "gate": true,
+      "pass": false,
+      "coverage": 0
+    },
+    {
+      "id": "followup-sure-en",
+      "category": "followup",
+      "gate": true,
+      "pass": false,
+      "coverage": 0
+    },
+    {
+      "id": "followup-continue-tr",
+      "category": "followup",
+      "gate": true,
+      "pass": false,
+      "coverage": 0
+    },
+    {
+      "id": "followup-why-en",
+      "category": "followup",
+      "gate": true,
+      "pass": false,
+      "coverage": 0
+    },
+    {
+      "id": "followup-long-answer-tr",
+      "category": "followup",
+      "gate": true,
+      "pass": false,
+      "coverage": 0
+    },
+    {
+      "id": "capture-long-plain-reply",
+      "category": "capture",
+      "gate": true,
+      "pass": false,
+      "coverage": 0
+    },
+    {
+      "id": "session-recall-tr",
+      "category": "session-recall",
+      "gate": true,
+      "pass": false,
+      "coverage": 0
+    },
+    {
+      "id": "cross-engine-en",
+      "category": "cross-engine",
+      "gate": true,
+      "pass": true,
+      "coverage": 1
+    },
+    {
+      "id": "cross-session-tr",
+      "category": "cross-session",
+      "gate": true,
+      "pass": true,
+      "coverage": 1
+    },
+    {
+      "id": "cross-session-inflected-tr",
+      "category": "cross-session",
+      "gate": false,
+      "pass": false,
+      "coverage": 0
+    },
+    {
+      "id": "knowledge-update-tr",
+      "category": "knowledge-update",
+      "gate": true,
+      "pass": true,
+      "coverage": 1
+    },
+    {
+      "id": "abstention-en",
+      "category": "abstention",
+      "gate": true,
+      "pass": true,
+      "coverage": 1
+    },
+    {
+      "id": "isolation-tr",
+      "category": "isolation",
+      "gate": true,
+      "pass": true,
+      "coverage": 1
+    },
+    {
+      "id": "instruction-persistence-en",
+      "category": "instruction-persistence",
+      "gate": false,
+      "pass": false,
+      "coverage": 0
+    },
+    {
+      "id": "constraint-retention-tr",
+      "category": "constraint-retention",
+      "gate": false,
+      "pass": true,
+      "coverage": 1
+    },
+    {
+      "id": "dead-end-en",
+      "category": "dead-end",
+      "gate": true,
+      "pass": true,
+      "coverage": 1
+    },
+    {
+      "id": "handoff-en",
+      "category": "handoff",
+      "gate": true,
+      "pass": true,
+      "coverage": 1
+    },
+    {
+      "id": "file-diff-tr",
+      "category": "file-diff",
+      "gate": true,
+      "pass": true,
+      "coverage": 1
+    },
+    {
+      "id": "error-recovery-en",
+      "category": "error-recovery",
+      "gate": true,
+      "pass": true,
+      "coverage": 1
+    },
+    {
+      "id": "robust-code-block-en",
+      "category": "robustness",
+      "gate": true,
+      "pass": true,
+      "coverage": 1
+    },
+    {
+      "id": "robust-injection-en",
+      "category": "robustness",
+      "gate": true,
+      "pass": true,
+      "coverage": 1
+    },
+    {
+      "id": "robust-unicode-crlf-tr",
+      "category": "robustness",
+      "gate": true,
+      "pass": true,
+      "coverage": 1
+    },
+    {
+      "id": "budget-pressure-en",
+      "category": "budget-pressure",
+      "gate": false,
+      "pass": false,
+      "coverage": 0
+    }
+  ]
+}
