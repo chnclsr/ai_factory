@@ -1,6 +1,8 @@
 // `node router.mjs memory <command>`: inspection and maintenance commands for the memory store.
 //
 //   memory session show [<alias|sid>]          turns, engines and changed files of a session
+//   memory record-agy --transcript <file> --session <id> [--model <m>]
+//                                               record Antigravity's last turn (Stop hook)
 //   memory state show|update [--session <s>] [--force]
 //                                               the model-written session state (phase 3)
 //   memory turn show <n> [--session <s>]        the full recorded request and reply of turn n
@@ -30,6 +32,7 @@ import { revertPatch } from './worktree.mjs';
 import { followMoves, describeProjects, renameProject, mergeProjects } from './projects.mjs';
 import { sanitizeValue, neutralizeForInjection } from './sanitize.mjs';
 import { readState, renderState, updateState } from './state.mjs';
+import { recordAgyTurn } from './agy.mjs';
 import path from 'node:path';
 
 function parseArgs(argv) {
@@ -126,6 +129,13 @@ export async function runMemoryCli(argv, { repoDir, indexFile = null, configFile
   // so it works while the index is locked. Engines run it when the block shortened a turn.
   // Session state (phase 3): `state show` prints it, `state update` asks the summariser engine for a
   // new one. The router starts `state update` as a detached process after a turn when one is due.
+  // Antigravity's own turn, from its transcript (started by the plugin's Stop hook).
+  if (group === 'record-agy') {
+    const result = recordAgyTurn({ repoDir, transcriptPath: flags.transcript, sid: flags.session, cwd: workdir, model: flags.model });
+    io.out(`record-agy: ${result.status}${result.n ? ` (turn ${result.n})` : ''}\n`);
+    return ['recorded', 'duplicate', 'routed', 'no_exchange'].includes(result.status) ? 0 : 1;
+  }
+
   if (group === 'state' && (action === 'show' || action === 'update')) {
     const sid = pickSession(snapshot, flags.session || arg);
     if (!sid) { io.err(`No session found in project ${project.key}.\n`); return 1; }

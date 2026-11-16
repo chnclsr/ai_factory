@@ -152,7 +152,9 @@ export function recordTurnCommit(repoDir, ctx, outcome, extra = {}) {
       wt_before: ctx.before?.tree || null, wt_after: extra.after?.tree || null,
       files: diff.files, files_reason: diff.reason, patch_ref: patchRef, patch_truncated: Boolean(diff.patchTruncated),
       attempts: outcome.attempts || [], injected: ctx.injected || [], injected_pack: ctx.injectedPack || null,
-      handoff: extra.handoffId || null
+      handoff: extra.handoffId || null,
+      // Extra fields of non-router writers (Antigravity's own turns carry their transcript step).
+      ...(extra.fields || {})
     }, { maxBytes: RESPONSE_HEAD_BYTES * 4 });
     view.appendLine(paths.log, JSON.stringify(line), { maxBytes: 64 * 1024 });
 

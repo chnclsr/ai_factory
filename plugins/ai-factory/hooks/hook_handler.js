@@ -100,20 +100,45 @@ function payloadCwd(payload) {
   return process.cwd();
 }
 
+// A new conversation (SessionStart has no invocationNum) also gets the project's memory index.
+// Reading a few sessions' turns from git objects takes longer than the handoff lookup, and it
+// runs once per conversation, so it gets its own deadline.
+const INDEX_DEADLINE_MS = 400;
+
 function memoryNotice(installation, payload, routerCommand) {
   const root = installation.root || path.dirname(String(installation.router || ''));
+  const sessionStart = payload.invocationNum === undefined && payload.initialNumSteps === undefined;
   const work = (async () => {
     const { pathToFileURL } = require('node:url');
     const hook = await import(pathToFileURL(path.join(root, 'src', 'memory', 'hook.mjs')).href);
-    return hook.handoffNotice({
+    const options = {
       dataDir: path.resolve(process.env.AI_FACTORY_DATA_DIR || path.join(root, '.runtime')),
       configFile: path.resolve(process.env.AI_FACTORY_CONFIG || path.join(root, 'router_config.json')),
       cwd: payloadCwd(payload),
-      routerCommand
-    });
+      routerCommand,
+      sid: payloadSession(payload)
+    };
+    const parts = [hook.handoffNotice(options)];
+    if (sessionStart && hook.memoryIndex) parts.push(hook.memoryIndex(options));
+    return parts.filter(Boolean).join('\n\n');
   })().catch(() => '');
-  const deadline = new Promise(resolve => setTimeout(() => resolve(''), MEMORY_DEADLINE_MS).unref());
+  const deadline = new Promise(resolve => setTimeout(() => resolve(''), sessionStart ? INDEX_DEADLINE_MS : MEMORY_DEADLINE_MS).unref());
   return Promise.race([work, deadline]);
+}
+
+// Stop: when an Antigravity turn ends normally, record it into memory in a detached process, so
+// router engines (and later conversations) see what the agent did on its own. Never blocks.
+function recordStop(installation, payload) {
+  if (payload.terminationReason !== 'NO_TOOL_CALL') return;
+  const sid = payloadSession(payload);
+  if (!sid || typeof payload.transcriptPath !== 'string' || !payload.transcriptPath) return;
+  const { spawn } = require('node:child_process');
+  const args = [installation.router, 'memory', 'record-agy', '--transcript', payload.transcriptPath, '--session', sid,
+    '--cwd', payloadCwd(payload), '--model', String(payload.modelName || 'gemini')];
+  const child = spawn(installation.node || process.execPath, args, { detached: true, stdio: 'ignore', windowsHide: true,
+    env: { ...process.env, AI_FACTORY_ROUTER_DEPTH: '1' } });
+  child.on('error', () => {});
+  child.unref();
 }
 
 let input = '';
@@ -139,6 +164,11 @@ process.stdin.on('end', async () => {
     const conversation = payloadSession(payload);
     // The agent copies this command into its router calls, so --session rides along.
     const command = conversation ? baseCommand + ' --session ' + conversation : baseCommand;
+    if (payload.terminationReason !== undefined) {
+      try { recordStop(installation, payload); } catch {}
+      console.log(JSON.stringify({}));
+      return;
+    }
     if (payload.toolCall) {
       const name = payload.toolCall.name;
       const args = payload.toolCall.args || {};

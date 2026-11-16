@@ -827,9 +827,15 @@ async function loadMemory(config) {
 async function main() {
   // Memory commands only read or write the store and never start an engine, so the recursion guard
   // does not apply: an engine that runs `memory turn show` must get the turn, not a handoff report.
-  if (process.argv[2] === 'memory') {
+  // The Antigravity hook hands the agent a command that already carries `--session <conversation>`,
+  // so `<command> memory turn show 2` arrives as `--session <id> memory turn show 2`; that session
+  // becomes the default, and an explicit --session later in the line still wins.
+  const cliArgs = process.argv.slice(2);
+  const memoryArgs = cliArgs[0] === 'memory' ? cliArgs.slice(1)
+    : cliArgs[0] === '--session' && cliArgs[2] === 'memory' ? ['--session', cliArgs[1], ...cliArgs.slice(3)] : null;
+  if (memoryArgs) {
     const { runMemoryCli } = await import('./memory/cli.mjs');
-    process.exit(await runMemoryCli(process.argv.slice(3), { repoDir: MEMORY_REPO, indexFile: MEMORY_INDEX, configFile: CONFIG_FILE, routerScript: path.join(ROOT, 'router.mjs') }));
+    process.exit(await runMemoryCli(memoryArgs, { repoDir: MEMORY_REPO, indexFile: MEMORY_INDEX, configFile: CONFIG_FILE, routerScript: path.join(ROOT, 'router.mjs') }));
   }
 
   const depth = parseInt(process.env.AI_FACTORY_ROUTER_DEPTH || '0', 10);

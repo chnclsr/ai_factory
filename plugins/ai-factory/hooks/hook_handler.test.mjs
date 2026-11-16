@@ -91,6 +91,6 @@ test('the injected router command carries the Antigravity conversation as --sess
 test('a missing or unsafe conversation id adds no --session', () => {
   for (const conversationId of [undefined, '', '../evil', 'a b', 'x.lock', 42]) {
     const rule = injectedRule({ conversationId });
-    assert.doesNotMatch(rule, /--session/, String(conversationId));
+    assert.doesNotMatch(rule, /router.mjs" --session/, String(conversationId));
   }
 });

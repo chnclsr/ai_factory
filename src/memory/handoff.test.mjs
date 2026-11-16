@@ -66,7 +66,7 @@ test('A6: a Gemini handoff is written, shown by the hook and can be taken once',
   const second = h.run(['memory', 'handoff', 'accept', hid, '--cwd', cwd]);
   assert.equal(second.status, 3);
   assert.match(second.stderr, /it is accepted/);
-  assert.doesNotMatch(runHook(h, { cwd }).injectSteps[0].systemMessage.systemMessage, /retrieved-memory/);
+  assert.doesNotMatch(runHook(h, { cwd }).injectSteps[0].systemMessage.systemMessage, /kind="handoff"/);
 });
 
 test('fallback exhaustion and a failed --no-fallback call both leave a handoff in the report', t => {

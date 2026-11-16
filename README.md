@@ -297,6 +297,10 @@ Automatic sessions: a call with no `--name`, `--resume` or `--session` continues
 
 Antigravity conversations: the plugin hook reads `conversationId` and `workspacePaths` from Antigravity's payload and puts `--session <conversationId>` into the router command it hands the agent. Each Antigravity conversation therefore gets its own memory session inside the project (the project comes from the workspace folder), and a new chat in the same project starts a new branch instead of joining the previous one. Within one conversation the session never expires, whatever `auto_session_minutes` says; that setting only applies to calls from outside Antigravity.
 
+Antigravity's own work: the plugin's `Stop` hook fires when an Antigravity turn ends normally and starts a detached `memory record-agy`, which reads Antigravity's transcript and records the user's request and the agent's final answer as a turn of the same conversation's session (engine `antigravity/<model>`). Thinking steps and tool output are not recorded, a turn is recorded once, and turns that ran the router are skipped because the router already recorded them. So router engines see what the agent did on its own (also with the extension's actor switched off), and later conversations can find it.
+
+A new Antigravity conversation gets a short memory index from the `SessionStart` hook: the latest turns of the project's most recent sessions and the commands that read more (`memory search`, `memory session show`, `memory turn show`). The rule file tells the agent to read memory before redoing earlier work; those commands only read and are allowed without `[AI Factory]`. The command the hook hands the agent starts with `--session <conversation>`, which the memory commands take as their default session.
+
 Report line: with memory enabled, every execution report ends with a `memory:` line naming the project and session, what the memory block gave the engine and whether the turn was saved:
 
 ```

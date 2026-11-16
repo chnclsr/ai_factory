@@ -23,7 +23,12 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "type": "command",
+        "command": "node ./hooks/hook_handler.js"
+      }
     ]
   }
 }
-
