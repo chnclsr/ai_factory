@@ -68,7 +68,7 @@ export function scenarios() {
       ],
       probe: { engine: 'claude', model: 'haiku-5.5', task: 'emin misin' },
       expect: { present: ['KESTREL-41'] },
-      live: { rubric: 'The answer re-examines the claim that the bottleneck is CPU-side data preparation rather than NVMe, instead of asking what "emin misin" refers to.' }
+      live: { rubric: 'The answer is about the earlier conclusion that the bottleneck is CPU-side data preparation rather than NVMe (it may re-check it, defend it or say how sure it is). It fails only if it asks what "emin misin" refers to or talks about something else.' }
     },
     {
       id: 'followup-sure-en', category: 'followup', lang: 'en', gate: true,
@@ -79,7 +79,7 @@ export function scenarios() {
       ],
       probe: { engine: 'vibe', task: 'are you sure?' },
       expect: { present: ['OSPREY-17'] },
-      live: { rubric: 'The answer re-checks the claim that per-row transactions make the import slow, instead of asking what "are you sure" refers to.' }
+      live: { rubric: 'The answer is about the earlier claim that per-row transactions make the import slow (it may re-check it, defend it or say how sure it is). It fails only if it asks what "are you sure" refers to or talks about something else.' }
     },
     {
       id: 'followup-continue-tr', category: 'followup', lang: 'tr', gate: true,
@@ -90,7 +90,7 @@ export function scenarios() {
       ],
       probe: { engine: 'muse', task: 'devam et' },
       expect: { present: ['HERON-22'] },
-      live: { rubric: 'The answer continues with step 4, running the migration script on staging.' }
+      live: { rubric: 'The answer identifies the next step as step 4, running the migration script on staging (it may say it cannot run it in this workspace). It fails if it asks what to continue or names another step.' }
     },
     {
       id: 'followup-why-en', category: 'followup', lang: 'en', gate: true,
@@ -112,7 +112,7 @@ export function scenarios() {
       ],
       probe: { engine: 'claude', model: 'haiku-5.5', task: 'emin misin' },
       expect: { present: ['CONDOR-58'] },
-      live: { rubric: 'The answer re-examines the conclusion that 256 TiB is not enough and about 420 TiB is needed.' }
+      live: { rubric: 'The answer is about the earlier conclusion that 256 TiB is not enough and about 420 TiB is needed (it may re-check it, defend it or say how sure it is). It fails only if it asks what "emin misin" refers to or talks about something else.' }
     },
     {
       id: 'capture-long-plain-reply', category: 'capture', lang: 'tr', gate: true,

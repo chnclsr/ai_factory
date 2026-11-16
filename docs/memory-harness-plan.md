@@ -1,6 +1,36 @@
 # Memory harness and follow-up continuity: development plan
 
-Status: proposed, nothing implemented yet. Extends `docs/memory-plan.md` (the memory layer itself).
+Extends `docs/memory-plan.md` (the memory layer itself).
+
+## Status (2026-11-16)
+
+Shipped: H1-H5 (layer 1, live layer with judge, replay, threshold sweep), Phase 0, Phase 1, Phase 2,
+and the rule-file fix (section 6). Phase 3 and Phase 4 are not started: the numbers below do not
+call for them yet.
+
+| Measurement | Before | After |
+|---|---|---|
+| Layer 1, all 24 scenarios | 13/23 pass (pull scenario added later) | 22/24 pass |
+| Layer 1, gated coverage | 0.632 | 1.0 |
+| Layer 1, follow-up scenarios | 0/5 | 5/5 |
+| Threshold sweep, gated coverage at `conversation_tokens` 0 / 400 / 800+ | | 0.65 / 0.95 / 1.0 |
+| Live follow-ups, vibe flash and muse (judge: vibe flash, 1 run) | | vibe 5/5, muse 4/5 |
+| Live, follow-ups + cross-engine + update + abstention + dead end + pull | | vibe 9/10, muse 7/10 before the rubric fix |
+| Live block rejections | | 0 |
+
+Still failing in layer 1: the inflected Turkish cross-session query (keyword search misses
+`veritabanının yedeğini` for `Veritabanı yedekleri`; local vectors fix it but are off by default)
+and the 40-turn budget-pressure case at 1600 tokens (passes at 2400). Both are non-gated.
+
+Live notes: every answer tied the follow-up to the right earlier answer; none asked what it
+referred to. The remaining live failures are engine behaviour, not memory: muse once claimed it had
+run a migration script that does not exist in the seeded workspace, and on replayed real sessions
+the cheap judge graded some "I can't re-verify here" answers as failures. Replays run in an empty
+workspace, so engines cannot re-read the original files. The vibe CLI currently rejects the default
+model `glm-5-3` ("Unknown model"); live runs used `vibe-glm-5.3-flash`.
+
+Not done: billed-versus-sent token tracking (cache impact) and the external LongMemEval/LoCoMo
+subset; the live layer runs once per scenario unless `--runs` is raised.
 
 ## 1. Why
 
