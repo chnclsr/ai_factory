@@ -1,11 +1,11 @@
 {
-  "version": "4d2b7ea",
-  "date": "2026-11-16T08:10:28.566Z",
+  "version": "926db26",
+  "date": "2026-11-16T08:13:19.363Z",
   "summary": {
     "scenarios": 23,
-    "passed": 13,
-    "coverage": 0.565,
-    "gatedCoverage": 0.632,
+    "passed": 14,
+    "coverage": 0.609,
+    "gatedCoverage": 0.684,
     "overBudget": 0,
     "byCategory": {
       "followup": {
@@ -15,8 +15,8 @@
       },
       "capture": {
         "scenarios": 1,
-        "passed": 0,
-        "coverage": 0
+        "passed": 1,
+        "coverage": 1
       },
       "session-recall": {
         "scenarios": 1,
@@ -130,8 +130,8 @@
       "id": "capture-long-plain-reply",
       "category": "capture",
       "gate": true,
-      "pass": false,
-      "coverage": 0
+      "pass": true,
+      "coverage": 1
     },
     {
       "id": "session-recall-tr",

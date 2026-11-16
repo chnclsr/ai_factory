@@ -23,6 +23,9 @@ import { ROOT, CONFIG_FILE, DATA_DIR, MEMORY_REPO, MEMORY_INDEX, stateFile } fro
 import { decideWatchdogAction, sampleTreeCpuMs } from './watchdog.mjs';
 import { createLineCapture } from './stream-capture.mjs';
 
+// How much of an engine's stdout the memory may record before only a rolling tail is kept.
+const REPLY_HEAD_BYTES = 512 * 1024;
+
 const __dirname = ROOT;
 const REGISTRY_FILE = stateFile('session_registry.json');
 const HEALTH_FILE = stateFile('health_registry.json');
@@ -342,13 +345,25 @@ async function runCommand(cmdString, cwd, engineName, config) {
 
     let lastActivityAt = Date.now();
     let tailBuffer = [];
+    // The reply the memory records is the engine's whole stdout, not the 100-line tail above:
+    // with the tail alone a long plain-text reply lost its beginning. Past REPLY_HEAD_BYTES the
+    // head stops growing and only a rolling tail is kept, so a runaway engine cannot grow it forever.
+    const replyHead = [];
+    let replyHeadBytes = 0;
+    const replyTail = [];
+    let replyOverflow = false;
     const capture = createLineCapture({
-      onLine: line => {
+      onLine: (line, stream) => {
+        if (stream === 'stdout') {
+          if (!replyOverflow && replyHeadBytes + line.length < REPLY_HEAD_BYTES) { replyHead.push(line); replyHeadBytes += line.length + 1; }
+          else { replyOverflow = true; replyTail.push(line); if (replyTail.length > 200) replyTail.shift(); }
+        }
         if (!line.trim()) return;
         tailBuffer.push(line);
         if (tailBuffer.length > 100) tailBuffer.shift();
       }
     });
+    const replyText = () => (replyOverflow ? [...replyHead, '[…]', ...replyTail] : replyHead).join('\n');
     let isFinished = false;
     let previousCpuMs = null;
     let lastCpuProgressAt = Date.now();
@@ -392,7 +407,7 @@ async function runCommand(cmdString, cwd, engineName, config) {
       killProcessTree(child.pid);
       capture.flush();
       resolve({ exitCode: 42, signal: 'SIGKILL', watchdogTimeout: true,
-        watchdogReason: reason, initialHang: !hasReceivedAnyOutput, output: tailBuffer.join('\n') });
+        watchdogReason: reason, initialHang: !hasReceivedAnyOutput, output: tailBuffer.join('\n'), reply: replyText() });
     }
 
     const watchdogInterval = setInterval(() => {
@@ -448,6 +463,7 @@ async function runCommand(cmdString, cwd, engineName, config) {
         signal,
         watchdogTimeout: false,
         output: tailBuffer.join('\n'),
+        reply: replyText(),
         sessionId,
         hasResponse,
         cliError
@@ -930,6 +946,7 @@ Kullan\u0131m:
   const errors = [];
   let succeedWith = null;
   let lastOutput = '';
+  let lastReply = '';
   let lastSessionId = null;
   const claudeEffort = decideClaudeEffort(options.task, config, options.reasoningEffort);
   if (attempts.some(a => a.engine === 'claude')) {
@@ -963,6 +980,7 @@ Kullan\u0131m:
       const prompt = memory ? memory.buildPrompt(options.task, { ctx: memoryCtx, engine, model, engineSessionId: attempt.sessionId, attemptIndex: index, errors }) : options.task;
       const res = await executors[engine](prompt, model, options.cwd, attempt.sessionId, config);
       lastOutput = res.output;
+      lastReply = res.reply ?? res.output;
       if (res.sessionId) lastSessionId = res.sessionId;
       const jsonEngine = JSON_ENGINES.includes(engine);
       const ok = res.exitCode === 0 && !res.watchdogTimeout &&
@@ -1024,7 +1042,7 @@ Kullan\u0131m:
     ok: Boolean(succeedWith) && succeedWith !== 'handoff_to_gemini', succeedWith,
     aborted: options.engine === 'aborted', handoffReason: 'fallback chain exhausted',
     engineSessionId: lastSessionId || extractSessionId(lastOutput) || resumeSessionId,
-    output: lastOutput, attempts: errors
+    output: lastReply || lastOutput, attempts: errors
   }) : null;
 
   // Standart Rapor \u00c7\u0131kt\u0131s\u0131 (Path zinciri ile)

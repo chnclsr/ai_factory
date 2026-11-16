@@ -36,7 +36,11 @@ if (process.env.AI_FACTORY_LIVE !== '1') {
 
 const onlyArg = process.argv.find(a => a.startsWith('--only='));
 const only = onlyArg ? onlyArg.slice(7).split(',').filter(Boolean) : null;
-const ENGINES = ['vibe', 'opencode', 'muse', 'codex', 'claude'];
+// The engines the router actually uses: the fallback chain plus Claude (the critic). OpenCode and
+// Codex stay in the config for manual --engine calls but only add noise and quota use here;
+// --only=opencode still runs them on request.
+const ENGINES = [...new Set([...CONFIG.fallback_chain.map(step => step.engine), 'claude',
+  ...(only || []).map(o => o.split('/')[0]).filter(e => CONFIG.engines[e])])];
 const targets = ENGINES.flatMap(engine => Object.keys(CONFIG.engines[engine]?.models || {}).map(model => ({ engine, model })))
   .filter(t => !only || only.includes(t.engine) || only.includes(`${t.engine}/${t.model}`));
 
