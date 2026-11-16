@@ -33,14 +33,14 @@
     { "from": "hooks", "to": "router", "label": "CLI call", "variant": "emphasis" },
     { "from": "policy", "to": "router", "label": "model allowlist", "labelAt": [574, 132], "variant": "security" },
     { "from": "router", "to": "registry", "label": "sessions and health", "labelAt": [574, 376] },
-    { "from": "router", "to": "muse", "label": "default / fallback", "labelAt": [904, 210] },
-    { "from": "router", "to": "codex", "label": "fallback / explicit", "labelAt": [904, 332] },
-    { "from": "router", "to": "opencode", "label": "free selection", "labelAt": [904, 454] },
+    { "from": "router", "to": "muse", "label": "last free step", "labelAt": [904, 210] },
+    { "from": "router", "to": "codex", "label": "explicit only", "labelAt": [904, 332] },
+    { "from": "router", "to": "opencode", "label": "named, free only", "labelAt": [904, 454] },
     { "from": "router", "to": "claude", "label": "paid selection", "labelAt": [904, 576], "variant": "security" },
     { "from": "router", "to": "gemini", "label": "final handoff", "variant": "dashed" }
   ],
   "cards": [
-    { "dot": "cyan", "title": "Selection", "items": ["Routine tasks start with Muse", "OpenCode and Claude can be selected explicitly"] },
+    { "dot": "cyan", "title": "Selection", "items": ["Routine tasks start with Vibe (GLM 5.3 Flash)", "OpenCode, Codex and Claude run only when named"] },
     { "dot": "rose", "title": "Model guardrails", "items": ["OpenCode: configured free models", "Claude: Haiku/Sonnet + explicit Opus 5.5"] },
     { "dot": "emerald", "title": "Handoff", "items": ["Attempts appear in the execution report", "A Gemini handoff does not mean the task is complete"] }
   ]

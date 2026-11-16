@@ -1,374 +1,329 @@
-﻿# AI Factory
+# AI Factory
 
-> **Smart Token Offloading and Multi-Engine Orchestrator for Antigravity**
+> A local multi-engine task router for Antigravity, with a memory that follows the conversation across engines.
 
-AI Factory routes coding and repository work from Antigravity/Gemini to local AI CLIs. You can let it choose a starting engine or name OpenCode, Claude, Muse, or Codex yourself. It records what actually ran and can continue a saved CLI session.
+AI Factory sends coding and repository work from Antigravity/Gemini to local AI command-line tools. It starts on a free chain by default
+or on the engine you name, falls back when one fails, prints what actually ran, and remembers the conversation in a git store so the next
+engine, the next chat and the next day start from what was already done.
 
-| Before | After |
+| Without it | With it |
 |---|---|
-| Pick a CLI and model by hand for every task. | Send one task to the router; it selects an engine or uses the one you named. |
-| Lose track of which engine ran or whether a fallback happened. | Read one execution report with the actual `path` and `succeed_with`. |
-| Start over on a follow-up. | Save a named session and resume it when that CLI returns a session ID. |
+| Pick a CLI and a model by hand for every task. | Send one task to the router; it picks an engine or uses the one you named. |
+| Lose track of which engine ran or whether a fallback happened. | Read one execution report with the real `path`, `succeed_with` and a `memory:` line. |
+| Start over when you switch engine, open a new chat or say "are you sure?". | Every engine gets the conversation so far, in its own budget; a new Antigravity chat gets an index of earlier work. |
 
-OpenCode is restricted to the free models in [router_config.json](router_config.json). Claude uses your account's quota or billing: configured Haiku/Sonnet models and explicitly requested Opus 5.5 are allowed. Actual availability and charges depend on your provider account.
+OpenCode is restricted to the free models in [router_config.json](router_config.json). Claude uses your account's quota or billing: the
+configured Haiku and Sonnet models and an explicitly requested Opus 5.5 are allowed. Real availability and charges depend on your provider accounts.
 
----
+## Contents
 
-## What You Get
-
-| Feature | What it does |
-|---|---|
-| Smart routing | With no model named, runs the free chain Vibe `vibe-glm-5.3-flash` → `vibe-glm-5.3` → `deepseek-v4.1-flash-free` → `mimo-v2.6-flash-free` → `glm-5.3-flash-free` (OpenCode, free) → Muse `muse-spark-1.3-contributor`. Codex is not in the chain for now; it runs only when you name it. A model you name (flag or task text) runs first. |
-| Model guardrails | Rejects paid OpenCode IDs and unlisted Claude models; Opus 5.5 requires an explicit request. |
-| Claude delegation check | The Antigravity hook rejects direct headless Claude launches from terminal tools and directs the agent to the router; help and authentication checks remain available. |
-| Free fallback chain | If a model fails, the next free chain step runs; OpenCode models are quarantined individually. Claude hands back to Gemini rather than trying another engine. |
-| Named sessions | `--name` stores a session; `--resume` continues it when the CLI supplied an ID. |
-| Execution report | `path` lists only engines attempted in **this** router call; `succeed_with` names the successful engine or Gemini handoff. |
-| Health checks | Configurable watchdog and circuit breaker detect stalled or quarantined engines. `--quota` checks Muse, Codex, and Antigravity, not OpenCode/Claude. |
-| AGY task checks | For long delegated work, the plugin instructs AGY to schedule status checks at 30, 120, and 240 seconds, then every 120 seconds until the task ends, when its in-turn timer tool is available. |
-
-AGY is instructed to inspect actual progress while a long task runs. If its timer tool supports `TimerCondition`, AGY is instructed to use `never` so progress messages do not cancel checks. The router starts its task watchdog as soon as an engine launches and prints a start notice. It reports whether the engine process is alive at 30, 120, and 240 seconds, then every 120 seconds while it runs. After 30 seconds without initial output, or 120 seconds of later silence, it also checks the engine and its child processes. If their CPU use stays unchanged for another 120 seconds, it stops the task. Every task has a 10-minute limit, even if output continues; if CPU information is unavailable, that limit still applies. Adjust these limits in `router_config.json`.
-
-## Tools and Models
-
-`--engine` chooses the tool; `--model` chooses its model. The table shows the default when you select that tool without a model. With no tool or model selected, the router runs the free chain Vibe `vibe-glm-5.3-flash` → `vibe-glm-5.3` → `deepseek-v4.1-flash-free` → `mimo-v2.6-flash-free` → `glm-5.3-flash-free` (OpenCode, free) → Muse `muse-spark-1.3-contributor`, then hands off to Gemini. Codex runs only when named. `--model <name>` alone (or a model name in the task text, such as "glm ile" or "Opus 5.5") selects that model and its engine.
-
-| Tool (`--engine`) | CLI used | Default model | Model names accepted with `--model` |
-|---|---|---|---|
-| Vibe (`vibe`) | `vibe --prompt-file` | `vibe-glm-5.3-flash` (first in the default chain) | `vibe-glm-5.3-flash`, `vibe-glm-5.3`. Complexity keywords (architecture, refactor, ...) select `vibe-glm-5.3`. The CLI's `--model` takes an alias, so `~/.vibe/config.toml` must define the aliases `zai-glm-5-3-flash` and `glm-5-3`. Runs with `--agent auto-approve` and `--output streaming`; named sessions resume via `vibe --resume <id>` |
-| Muse (`muse`) | `muse exec` | `muse-spark-1.3-contributor` | Fixed to `muse-spark-1.3-contributor`; contributor mode is always enabled |
-| Codex (`codex`) | `codex exec` | `gpt-6-luna` | `gpt-6-luna`, `gpt-5.6-luna`, `gpt-5.6-terra` (free tier; Sol/Astra/gpt-5.5 are rejected) |
-| OpenCode (`opencode`) | `opencode run` | `deepseek-v4.1-flash-free` | The 9 configured free models listed below |
-| Claude Code (`claude`) | `claude -p` | `haiku-5.5` | `haiku-5.5`, `haiku-4.5`, `sonnet-5`, `sonnet-5.5`, `opus-5.5` |
-| Gemini / Antigravity (`gemini`) | Returns control to the calling agent | The calling agent's current model | The router does not select a new model for this handoff |
-
-For example, to run Claude Opus 5.5 and stop if it fails:
-
-```bash
-node router.mjs --engine claude --model opus-5.5 --no-fallback --task "Review the architecture"
-```
-
-OpenCode and Claude also accept the full model IDs from [router_config.json](router_config.json), such as `opencode/mimo-v2.6-flash-free` or `claude-opus-5-5`. Claude Opus 5.5 is selected only when requested explicitly. Codex rejects models outside its configured free-tier list. Muse always uses its fixed contributor model, even if another model is requested.
-
-<details>
-<summary>All 9 configured OpenCode models</summary>
-
-Use any of these names with `--engine opencode --model <name>`:
-
-- `deepseek-v4.1-flash-free` (default, chain step 1)
-- `mimo-v2.6-flash-free` (chain step 2)
-- `glm-5.3-flash-free` (chain step 3)
-- `minimax-m3.1-flash-free`
-- `nemotron-3.5-lightning-free`
-- `nemotron-3.5-super-vl-free`
-- `longcat-2.5-free`
-- `beam-free`
-- `big-pickle`
-
-Paid OpenCode models are rejected by the router.
-
-</details>
-
-These are the router's configured choices. Availability, quota, and charges depend on your provider account. See [Usage](#usage) for examples for each tool.
-
-## Architecture
-
-[Interactive system diagram HTML](docs/diagrams/ai-factory-architecture.html) · [Interactive routing flow HTML](docs/diagrams/ai-factory-routing.html) · [Architecture notes](docs/ARCHITECTURE.md)
-
-The Antigravity plugin adds routing guidance; the local router selects a CLI, applies model and health checks, records sessions, and prints the result. A Gemini handoff means the parent agent must finish the task—it is not proof that the task is complete. Both diagrams and their interactive viewer controls are in English.
-Open either HTML diagram locally for search, focus views, and theme switching.
+[Quick start](#quick-start) · [Engines and models](#engines-and-models) · [Usage](#usage) · [Memory](#memory) ·
+[Antigravity and the browser extension](#antigravity-and-the-browser-extension) · [Configuration](#configuration) ·
+[Repository layout](#repository-layout) · [Development](#development) · [Documentation](#documentation) · [Security](#security)
 
 ---
 
-## Directory Structure
+## Quick start
 
-```text
-ai_factory/
-├── router.mjs                 # Main CLI entry point
-├── quota_tracker.mjs          # Multi-provider quota inspection utility
-├── check_quotas.ps1           # PowerShell quota check runner
-├── deploy_skill.mjs           # Distribution script for global Antigravity dirs
-├── router_config.json         # Engine models and watchdog parameters
-├── docs/
-│   ├── ARCHITECTURE.md         # Routing policy and report semantics
-│   └── diagrams/              # Interactive architecture and workflow diagrams
-├── src/                       # Core implementation modules
-│   ├── router.mjs
-│   └── quota_tracker.mjs
-├── lib/                       # Path resolution and plugin utilities
-│   ├── paths.mjs
-│   └── plugin.mjs
-├── scripts/
-│   └── setup.mjs              # Environment initialization
-└── plugins/ai-factory/        # Global Antigravity Plugin
-    ├── plugin.json            # Plugin manifest
-    ├── hooks.json             # Event hooks (PreInvocation, PreToolUse)
-    ├── hooks/
-    │   ├── hook_handler.js    # Context protection and auto-delegation hook
-    │   └── inject.js          # System prompt injection helper
-    ├── rules/
-    │   ├── AGENTS.md          # Global agent rules and watchdog protocol
-    │   ├── GEMINI.md          # Gemini synchronization rules
-    │   └── ai_factory_router.md
-    └── skills/ai-factory/
-        └── SKILL.md           # Antigravity skill specification
-```
+Requirements: **Node.js 22.13 or newer** (memory search uses `node:sqlite`) and at least one engine CLI from the table below. There are no
+third-party dependencies.
 
----
-
-## Installation and Deployment
-
-### Prerequisites
-
-| To use | Required locally |
-|---|---|
-| AI Factory | Node.js 22 or newer (`package.json` requirement) |
-| Antigravity integration | Antigravity CLI (`agy`) or Antigravity IDE |
-| OpenCode tasks | OpenCode CLI installed and signed in to a provider with the selected free model |
-| Claude tasks | Claude Code CLI installed and signed in; your account may incur charges |
-| Muse tasks | Muse CLI (`muse`) installed and signed in with access to `muse-spark-1.3-contributor` |
-| Codex tasks | Codex CLI (`codex`) installed and signed in with access to the requested model |
-
-| Install step | Command | Result |
-|---|---|---|
-| Dependencies | `npm install` | Installs package dependencies. |
-| Global Antigravity plugin | `node deploy_skill.mjs` | Installs plugin, hooks, and rules. |
-| Native CLI/IDE skill catalog | `node deploy_skill.mjs --builtin` | Also adds the built-in AI Factory skill where the host catalog exists. |
-
-### Setup
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/chnclsr/ai_factory.git
-   cd ai_factory
-   ```
-
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-
-### Deploying Globally to Antigravity
-
-AI Factory provides `deploy_skill.mjs` to automatically wire the plugin, rules, hooks, and built-in skills across Antigravity runtime environments.
-
-#### 1. Standard Plugin Deployment
-Installs the global plugin, event hooks, and orchestrator rules:
 ```bash
-node deploy_skill.mjs
-```
-Target directory:
-- `~/.gemini/config/plugins/ai-factory/`
-  - `plugin.json` and `hooks.json` (Windows hooks use a launcher that handles spaces in installation paths)
-  - `hooks/hook_handler.js` (intercepts heavy context calls and delegates to router)
-  - `rules/AGENTS.md` and `rules/GEMINI.md` (active system rules for Antigravity)
-
-#### 2. Builtin Skill Deployment (CLI and IDE Native Discovery)
-To allow Antigravity CLI and Antigravity IDE to discover and index `ai_factory` directly in their native built-in skill catalogs, run with the `--builtin` flag:
-```bash
-node deploy_skill.mjs --builtin
-```
-This distributes the skill specification (`SKILL.md`) to all existing host catalogs:
-- `~/.gemini/antigravity-cli/builtin/skills/ai_factory/SKILL.md` (Antigravity CLI)
-- `~/.gemini/antigravity/builtin/skills/ai_factory/SKILL.md` (Antigravity Core)
-- `~/.gemini/antigravity-ide/builtin/skills/ai_factory/SKILL.md` (Antigravity IDE)
-
-When executed, existing files are automatically backed up with a timestamp suffix before being updated.
-Plugin backups are stored in `~/.gemini/config/plugin-backups/`, outside the active plugin directory. Older installs may have `ai-factory.backup-*` folders inside `~/.gemini/config/plugins/`; move those folders to `plugin-backups/` so Antigravity cannot load their old rules as extra plugins. Start a new Antigravity session after updating the plugin.
-
----
-
-## Usage
-
-### Default Code/Repo Delegation (free chain, starts with OpenCode DeepSeek)
-```bash
+git clone https://github.com/chnclsr/ai_factory.git
+cd ai_factory
+npm run setup        # environment check, tests, deploys the Antigravity plugin
 node router.mjs --task "Analyze the repository structure and summarize dependencies"
 ```
 
-### Meta Muse Agent (0$ Contributor Mode)
+`npm run check` prints what is installed and what the configuration says (engine CLIs, fallback chain, plugin, memory); it exits 1 only
+for problems that stop the router from working. `npm run setup -- --skip-plugin` leaves your Antigravity directory alone.
+
+| To use | Needed locally |
+|---|---|
+| The router | Node.js 22.13+ |
+| Antigravity integration | Antigravity CLI (`agy`) or IDE |
+| Vibe (the default chain) | Vibe CLI (`vibe`), with the alias `zai-glm-5-3-flash` defined in `~/.vibe/config.toml` |
+| Muse | Muse CLI (`muse`), signed in with access to `muse-spark-1.3-contributor` |
+| Claude | Claude Code CLI, signed in (your account may incur charges) |
+| Codex | Codex CLI (`codex`), signed in with access to the requested model |
+| OpenCode | OpenCode CLI, signed in to a provider with the selected free model |
+
+## Engines and models
+
+`--engine` chooses the tool and `--model` its model. With neither, the router runs the free **fallback chain** and then hands off to Gemini:
+
+**Vibe `vibe-glm-5.3-flash` → Vibe `vibe-glm-5.3` → Muse `muse-spark-1.3-contributor` → Gemini**
+
+OpenCode and Codex are not in the chain; they run only when you name them. `--model <name>` alone (or a model name in the task text, such as
+"glm ile" or "Opus 5.5") selects that model and its engine.
+
+| Engine (`--engine`) | CLI used | Default model | Models accepted with `--model` |
+|---|---|---|---|
+| `vibe` | `vibe --prompt-file` | `vibe-glm-5.3-flash` (chain step 1) | `vibe-glm-5.3-flash`, `vibe-glm-5.3`. Complexity keywords (architecture, refactor, …) select the configured `complex_model`. The CLI takes an alias, so `~/.vibe/config.toml` must define `zai-glm-5-3-flash`. The Vibe CLI currently serves no `glm-5-3`, so chain step 2 fails and falls through to Muse until it does. Runs with `--agent auto-approve`; named sessions resume with `vibe --resume <id>` |
+| `muse` | `muse exec` | `muse-spark-1.3-contributor` | Fixed to that model; contributor mode is always on |
+| `claude` | `claude -p` | `haiku-5.5` | `haiku-5.5`, `haiku-4.5`, `sonnet-5`, `sonnet-5.5`, `opus-5.5` |
+| `codex` | `codex exec` | `gpt-6-luna` | `gpt-6-luna`, `gpt-5.6-luna`, `gpt-5.6-terra` (free tier; Sol, Astra and gpt-5.5 are rejected) |
+| `opencode` | `opencode run` | `deepseek-v4.1-flash-free` | The 9 free models in [router_config.json](router_config.json); paid IDs are rejected |
+| `gemini` | Returns control to the calling agent | The calling agent's model | The router selects nothing for this handoff |
+
+OpenCode and Claude also accept the full IDs from the configuration, such as `opencode/mimo-v2.6-flash-free` or `claude-opus-5-5`. Opus 5.5 is
+selected only when requested explicitly. Claude's `--fallback-model` is pinned to the selected model, so the CLI cannot silently switch to a
+more expensive one. Free availability can change at the provider.
+
+<details>
+<summary>The 9 configured OpenCode models</summary>
+
+`deepseek-v4.1-flash-free` (default), `mimo-v2.6-flash-free`, `glm-5.3-flash-free`, `minimax-m3.1-flash-free`, `nemotron-3.5-lightning-free`,
+`nemotron-3.5-super-vl-free`, `longcat-2.5-free`, `beam-free`, `big-pickle`. Use any of them with `--engine opencode --model <name>`.
+
+</details>
+
+## Usage
+
 ```bash
+# Default chain
+node router.mjs --task "Review the router and list risks"
+
+# A named engine
 node router.mjs --engine muse --task "Implement missing unit tests for the router module"
-```
-
-### OpenAI Codex Engine
-```bash
-node router.mjs --engine codex --model gpt-5.6-terra --task "Produce architectural refactoring roadmap"
-```
-
-### OpenCode Free Models
-```bash
-node router.mjs --engine opencode --model deepseek-v4.1-flash-free --name review --task "Review the router"
+node router.mjs --engine codex --model gpt-5.6-terra --task "Produce a refactoring roadmap"
 node router.mjs --engine opencode --model mimo-v2.6-flash-free --task "Find the failing test"
-```
-Change `--model` to another free model listed in `router_config.json`. Paid OpenCode model IDs are rejected. Free availability can change at the provider.
-
-### Claude Code
-```bash
-node router.mjs --engine claude --model haiku-5.5 --name draft --task "Summarize this repository"
-node router.mjs --engine claude --model sonnet-5.5 --task "Review the router"
 node router.mjs --engine claude --model opus-5.5 --no-fallback --task "Review the architecture"
 ```
-Claude Code must already be signed in. These models use your Claude account's quota or billing. Opus 5.5 is available with `--engine claude --model opus-5.5` (or `--model claude-opus-5-5`); a task that explicitly names "Opus 5.5" also selects it. Other Opus versions and Fable are excluded. `--no-fallback` stops after a Claude failure instead of handing the task back to Gemini.
 
-`haiku-5.5` is the configured default. Only the five Claude entries in `router_config.json` are accepted; a model's presence in the config does not guarantee access on your account. The router keeps Claude's `--fallback-model` on the same selected model, so the Claude CLI cannot silently switch to a more expensive model.
+`--no-fallback` stops after the selected engine fails instead of trying the next step (a failed Claude call otherwise hands back to Gemini).
+`--cwd <dir>` sets the working directory and decides the memory project.
 
-### Claude reasoning effort
+**Claude reasoning effort.** The router always passes `--effort` to Claude: `medium` by default, `high` when the task matches a complexity
+keyword. `xhigh` and `max` apply only when you ask for them, in the task text ("max effort") or with `--reasoning-effort low|medium|high|xhigh|max`,
+which always wins over auto-detection.
 
-The router always passes `--effort` to Claude. With no override, it scales with the task: `medium` by default, `high` when the task matches a configured complexity keyword (refactor, architecture, algorithm, security review, ...). Auto-selection never goes above `high` on its own — `xhigh` and `max` only apply when you ask for them, either in the task text ("max effort", "xhigh") or with an explicit flag:
+**Sessions.** `--name <name>` saves a named session; `--resume <name>` continues it when the CLI returned a session ID. OpenCode and Claude allow
+a different configured `--model` when resuming; `--resume <name> --engine <other>` keeps the memory session and starts a new conversation in the
+other engine. A missing session or provider session ID is an error; the router never silently starts a new conversation.
 
-```bash
-node router.mjs --engine claude --model opus-5.5 --reasoning-effort xhigh --task "..."
-```
+**The report.**
 
-`--reasoning-effort` (or `--effort`) accepts `low`, `medium`, `high`, `xhigh`, `max` and always wins over auto-detection.
-
-### Resuming Previous Session
-```bash
-node router.mjs --resume "session-name" --task "Continue refactoring"
-node router.mjs --resume "review" --model mimo-v2.6-flash-free --task "Now inspect the tests"
-```
-OpenCode and Claude allow a different configured `--model` when resuming. A missing session or a missing provider session ID is reported as an error; the router does not silently start a new conversation.
-
-### Reading the Report
 ```text
-path: gemini --> opencode(opencode/deepseek-v4.1-flash-free) [OK]
-succeed_with: opencode-opencode/deepseek-v4.1-flash-free
+path: gemini --> vibe(zai-glm-5-3-flash) [OK]
+choices: vibe
+errors: none
+succeed_with: vibe-zai-glm-5-3-flash
+memory: project=billing, session=0193a2f1, injected=3 turn(s) (~420/2400 tokens), saved=turn 5
 ```
-`path` covers one invocation only. If you called the router twice, the second report will not include engines tried by the first call. A failed or quarantined engine is included only when that same call attempted it.
 
-### Memory
+`path` covers one invocation only; a failed or quarantined engine appears only when that same call tried it. A Gemini handoff means the parent
+agent must finish the task; it is not proof that the task is done. The `memory:` line says which project and session the call ran in, what
+the memory block gave the engine (or why nothing was injected) and the turn it saved.
 
-With `memory.enabled` set to `true` in `router_config.json` (the default), every router call is recorded as one turn in a git repository at `.runtime/memory.git` (or `$AI_FACTORY_DATA_DIR/memory.git`). The repository is separate from your project, and each project has its own branch `refs/heads/p/<project>`. A turn holds the task, the start of the reply, the engine and model, the attempts that failed, and the files the call changed (with `+/-` line counts and a patch). Changes you made before the call are not counted. Set `memory.enabled` to `false` and the router behaves exactly as it did before memory existed.
+**Quota.** `node router.mjs --quota` (or `npm run quota`, or `scripts\check-quotas.ps1`) lists live quotas for Muse, Codex and Antigravity; OpenCode and
+Claude report none. `scripts\check-commandcode.ps1` reports Command Code usage.
+
+**Health.** A configurable watchdog and circuit breaker detect stalled or quarantined engines. The watchdog starts with the engine, reports
+at 30, 120 and 240 seconds and then every 120, checks the process tree after 30 seconds without output or 120 seconds of silence, stops a
+task whose CPU stays unchanged for another 120 seconds, and enforces a 10-minute limit. Limits are in `router_config.json`.
+
+**Language.** Whatever language you write in, the engines think and answer in English, and write documents and comments in English, unless your
+request explicitly asks for another language. `response_language` in `router_config.json` (default `"English"`; `""` switches it off; any language name works)
+puts one `[AI Factory] Language: …` line in front of every engine prompt. The Antigravity rule file says the same to the Antigravity agent.
+
+---
+
+## Memory
+
+With `memory.enabled` set to `true` (the default), every router call is recorded as one **turn** in a git repository at
+`.runtime/memory.git` (or `$AI_FACTORY_DATA_DIR/memory.git`). The repository is separate from your projects, nothing is ever written to
+your project, `AGENTS.md` or `CLAUDE.md`, and each project has its own branch `refs/heads/p/<project>`. A turn holds the task, the engine's whole
+reply, the engine and model, the attempts that failed and the files the call changed (with `+/-` line counts and a patch). No model call
+runs in the memory path. `memory.enabled: false` makes the router behave exactly as it did before memory existed, and a memory failure
+logs one line and never stops a task.
+
+### What an engine receives
+
+Before each attempt the engine's task starts with a `<retrieved-memory untrusted="true">` block, followed by your task unchanged:
+
+- **The conversation** so far, oldest first, newest last. It has its own budget (`conversation_tokens`): walking from the newest turn back, each
+  turn may take half of what is left, so a long answer is never crowded out by short turns behind it. A reply that does not fit keeps its
+  start and end around `[… N characters skipped, full reply: turn n]`. A short follow-up such as "emin misin" or "devam et" still gets this.
+- **The session state**, once the conversation is long: a typed note written in the background by a cheap engine (goal, decisions,
+  constraints, latest answers, dead ends, open questions, files, next step). Every item cites the turns it comes from, and the oldest turns
+  it covers are left out as raw lines.
+- **An open handoff** and the previous attempt's error, when there are any.
+- **Related notes and turns of other sessions**, found by keyword search (skipped for tasks under 20 characters), at most 5.
+- **A pull hint** after the block when a turn was shortened or left out: one line with the exact command (`memory turn show <n>`) that prints it in full.
+
+A resumed engine conversation gets only what it has not seen, and nothing if nothing changed. Nested router calls
+(`AI_FACTORY_ROUTER_DEPTH > 0`) get no block. Stored text is data: it is neutralised before injection, secrets (`sk-…`, `ghp_…`, bot tokens,
+`Bearer` values, `*_KEY=` assignments) are masked before anything is written, and the block says that the log holds requests that were already handled.
+
+### Projects and sessions
+
+- The **project** comes from `--project`, else a `project = "..."` line in the nearest `.ai-factory.toml` (which can also list `ignore_paths`),
+  else the `upstream` or `origin` remote of the git repository at `--cwd` (that is why a clone of `acme/api` is the project `acme-api-<hash>`),
+  else the folder name. There is no global "current project": call with another `--cwd`.
+- Every call belongs to a **session**: `--session <id>`, else `AI_FACTORY_SESSION_ID`, else the project's most recent session if it was
+  active in the last `memory.auto_session_minutes` (default 120; the report then says `(continued)`), else a new one.
+  `--name` and `--resume` are aliases inside the project. The Antigravity hook passes the chat's `conversationId`, so every Antigravity chat is its own session.
+- On the first run an existing `session_registry.json` moves into memory (renamed `.migrated`); entries without a `cwd` go to the `_unscoped`
+  project, and `memory session adopt <name> --cwd <dir>` moves one into a project.
+
+### Commands
 
 ```bash
+node router.mjs memory search billing --cwd <project>              # --scope repo|dir|mine, --global for every project
 node router.mjs memory session show [<alias|session id>] --cwd <project>
-node router.mjs memory turn diff 2 --session <alias|session id> --cwd <project>
-node router.mjs memory turn revert 2 --session <alias|session id> --cwd <project> --yes
-```
-
-`turn revert` lists the files first and asks for confirmation; without a terminal it needs `--yes`.
-
-Sessions and projects:
-
-- The project comes from `--project`, else a `project = "..."` line in the nearest `.ai-factory.toml`, else the `upstream` or `origin` remote of the git repository at `--cwd`, else the folder name. Switching projects means calling with another `--cwd`; there is no global "current project".
-- Every call belongs to a memory session: `--session <id>`, else `AI_FACTORY_SESSION_ID`, else a new id. `--name` and `--resume` are aliases inside the project, so the same name in two projects means two sessions.
-- `--resume <name> --engine <other>` keeps the same memory session and starts a new conversation in the other engine. Resuming the first engine later continues its own conversation.
-- On the first run with memory enabled, an existing `session_registry.json` is moved into memory and renamed `session_registry.json.migrated`. `--resume <name>` keeps finding the same engine session. Entries without a `cwd` go to the `_unscoped` project; `memory session adopt <name> --cwd <dir>` moves one into a project.
-
-```bash
+node router.mjs memory turn show 2 --session <id> --cwd <project>  # the full recorded request and reply
+node router.mjs memory turn diff 2 --session <id> --cwd <project>
+node router.mjs memory turn revert 2 --session <id> --cwd <project> --yes
 node router.mjs memory note add "Deploys go through staging first" --cwd <project>
 node router.mjs memory note add "I prefer small commits" --scope mine
-node router.mjs memory search deploy --scope dir --cwd <project>/services/api
-node router.mjs memory search deploy --global
+node router.mjs memory state show --session <id> --cwd <project>   # the background session state
+node router.mjs memory handoff begin --to claude --task "Port the CSV exporter to streams" --cwd <project>
+node router.mjs memory handoff list --cwd <project>
+node router.mjs memory handoff accept <id> --cwd <project>
+node router.mjs memory project list | rename <old> <new> --yes | merge <source> <target> --yes
 ```
 
-`--scope repo` (default) searches the project; `dir` keeps only turns and notes recorded under that directory; `mine` reads only your personal notes, which never appear in project results. `--global` searches every project (still never your personal notes) and prefixes each hit with its project. Search and the related-items part of the block use a full-text index at `.runtime/memory-index.sqlite` (SQLite FTS5 through `node:sqlite`, Node 22.13 or newer). The index is derived from the git repository and kept in step on each read; deleting it only costs a rebuild, and if it cannot be opened the router falls back to scanning the repository. Secrets (`sk-…`, `ghp_…`, Telegram bot tokens, `Bearer` values, `.env` style `*_KEY=` assignments) are masked before anything is written. Design and status: [docs/memory-plan.md](docs/memory-plan.md).
+`turn revert` lists the files first and asks for confirmation; without a terminal it needs `--yes`. A renamed or merged project keeps its whole
+history and its old key keeps resolving to the new one. A handoff can be taken exactly once, however many agents try.
 
-Before each attempt the engine's task file starts with a `<retrieved-memory untrusted="true">` block, followed by your task unchanged. The block holds only what that engine conversation has not seen yet. A resumed conversation with nothing new gets no block at all. A new engine, or a fallback step, gets the session's earlier turns (task, the recorded reply, changed files with `+/-` counts), the previous attempt's error, and up to five related notes or turns from other sessions. The conversation has its own budget (`conversation_tokens`): walking from the newest turn back, each turn may take half of what is left, so a long answer is never crowded out by a few short turns behind it. A reply that does not fit keeps its start and end around a `[… N characters skipped, full reply: turn n]` marker; the newest turn sits last, right before your task. When a turn was shortened or left out, the router adds one line of its own after the block with the command that prints the whole turn (`memory turn show <n>`), which the engine can run. Tasks shorter than 20 characters ("emin misin", "devam et") get the session's own turns and any handoff but no keyword-matched notes, so a short follow-up still sees the conversation; with no session history they get no block. Nested router calls (`AI_FACTORY_ROUTER_DEPTH > 0`) never get one. Memory is never written to `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` or any other file a harness loads on its own.
+### Settings
 
-| Key (`memory.*`) | Default | Purpose |
+`memory.*` in `router_config.json`:
+
+| Key | Default | Purpose |
 |---|---|---|
 | `enabled` | `true` | Turns the whole layer on or off |
 | `track_files` | `true` | Snapshot the project before and after each call to record that call's file changes |
-| `file_budget_ms` | `2000` | Time limit for each snapshot or diff; past it the turn is still recorded with `files: "unavailable"` |
-| `default_budget_tokens` | `1200` | Block size limit for a model without its own `memory_budget_tokens` |
-| `min_task_chars` | `20` | Shorter tasks skip the keyword search of related notes and turns |
-| `max_pages` | `5` | Most related notes/turns in one block |
-| `conversation_tokens` | `1600` | Budget for the session's own turns, on top of the model's memory budget. A model's `memory_conversation_tokens` overrides it (4000 for Claude and Codex). `0` restores the old fixed-width lines |
-| `l2_tokens` | `600` | With a conversation budget: cap for related notes and turns from other sessions |
-| `state_every_turns` / `state_min_turns` | `8` / `12` | Background session state: once a session has `state_min_turns` turns and its stored state is `state_every_turns` behind, the router starts one helper call that condenses the conversation (`0` switches it off) |
+| `file_budget_ms` | `2000` | Time limit for each snapshot; past it the turn is still recorded with `files: "unavailable"` |
+| `auto_session_minutes` | `120` | A call with no session named continues the latest session active within this many minutes; `0` starts a new one every time |
+| `default_budget_tokens` | `1200` | Block size for a model without its own `memory_budget_tokens` |
+| `conversation_tokens` | `1600` | Budget for the session's own turns, on top of the model's budget (a model's `memory_conversation_tokens` overrides it: 4000 for Claude and Codex). `0` restores fixed-width lines |
+| `l2_tokens` / `max_pages` | `600` / `5` | Cap and count for related notes and turns from other sessions |
+| `min_task_chars` | `20` | Shorter tasks skip the keyword search of related items (they still get the conversation) |
+| `l0_tokens` / `l1_tokens` / `recent_turns_verbatim` | `300` / `400` / `3` | Handoff and error cap; with `conversation_tokens: 0` the session-turns cap and the number of verbatim turns |
+| `pull_hint` | `1` | Add the `memory turn show` hint when a turn was shortened; an engine's `memory_pull: 0` turns it off for that engine |
+| `state_every_turns` / `state_min_turns` | `8` / `12` | Start a background state update once a session has `state_min_turns` turns and its state is `state_every_turns` behind; `0` stops it |
 | `state_tokens` / `state_engine` | `500` / `vibe/vibe-glm-5.3-flash` | Share of the conversation budget the state may use (`0` ignores a stored state), and the cheap engine that writes it |
-| `pull_hint` | `1` | Add the `memory turn show` hint when a turn was shortened; `0` turns it off. An engine's `memory_pull: 0` turns it off for that engine |
-| `l0_tokens` / `l1_tokens` | `300` / `400` | Caps for the handoff/previous-error layer and, with `conversation_tokens: 0`, the session-turns layer |
-| `recent_turns_verbatim` | `3` | With `conversation_tokens: 0`: newest unseen turns shown with task and reply; older ones get one line |
-| `index` | `true` | Use the SQLite full-text index for search and related items; `false` scans the git repository instead |
-| `vector.enabled` | `false` | Add local vectors to the index: finds notes whose words carry different Turkish suffixes or a typo, and quotes the matching part of a long note. See below |
+| `index` | `true` | Use the SQLite full-text index for search; `false` scans the git repository |
+| `vector.enabled` | `false` | Local vector search on top of full-text: finds notes whose Turkish words carry other suffixes or a typo, and quotes the matching part of a long note. Costs a one-time build and about 25 ms per block on a large store |
 
-`memory.vector` adds a vector search next to full-text search. The vectors are computed locally from words and letter triples (no model, no network), so they catch `veritabanının yedeklerini` for a note that says `veritabanı yedeği`, and `biling exportr` for `billing exporter`. Long notes are split into chunks; the block then quotes the chunks that matched, joined back together where they are adjacent, instead of the note's first lines. On the canary set it raised recall@5 for inflected and misspelled queries from 0.67 to 0.93 and left keyword queries at 1.0. It costs a one-time build (about 7 s for 23,000 chunks on the development machine) and about 25 ms more per block on a large store, which is why it is off by default. Other keys under `memory.vector`: `dim` (256), `chunk_chars` (600), `fts_weight` (0.7, the full-text share of the combined score), `min_similarity` (0.2), `ann_threshold` (4000 chunks; above it a project's vectors are grouped into clusters and only the `nprobe` (8) closest clusters are searched).
+Each model entry in `engines.*.models` has `memory_budget_tokens`: 800 for the free models, 2000 for Codex and Claude. Tokens are estimated as
+characters divided by 4; Turkish runs closer to 3 characters per token.
 
-Projects can be listed, renamed and merged. A renamed or merged-away project keeps its full history, and its old key (from a `.ai-factory.toml`, a remote or `--project`) keeps resolving to the new one. A merge keeps everything: when both projects have a note with the same name, the target's stays and the source's is saved as `<name>.from-<source>`, and a clashing session alias from the source becomes `<alias>@<source>`. Both commands ask for confirmation, or take `--yes`.
+### Antigravity's own work
 
-```bash
-node router.mjs memory project list
-node router.mjs memory project rename <old-key> <new-key> --yes
-node router.mjs memory project merge <source-key> <target-key> --yes
-```
+Antigravity's `Stop` hook fires when one of its turns ends normally and starts a detached `memory record-agy`, which reads Antigravity's
+transcript and records the user's request and the agent's final answer as a turn of that chat's session (engine `antigravity/<model>`).
+Thinking steps and tool output are not recorded, a turn is recorded once, and turns that ran the router are skipped because the router recorded them. Router
+engines therefore see what the agent did on its own, also with the extension's actor switched off. A new Antigravity chat gets a short
+memory index from the `SessionStart` hook (the latest turns of the project's recent sessions plus the read commands), and the rule file tells
+the agent to read memory before redoing earlier work. `.runtime/agy-record.log` has one line per recorded or skipped turn.
 
-Automatic sessions: a call with no `--name`, `--resume` or `--session` continues the project's most recent session if it was active in the last `memory.auto_session_minutes` (default 120; `0` starts a new session every call). The next engine then gets the earlier turns as "this session" in its memory block, so plain calls that switch provider keep the conversation. Only memory carries over; the engine's own conversation still starts fresh unless you use `--resume`. The report shows `session=<id> (continued)`. Pass `--name <new>` to start a separate thread inside the 120-minute window.
+### Measuring memory
 
-Antigravity conversations: the plugin hook reads `conversationId` and `workspacePaths` from Antigravity's payload and puts `--session <conversationId>` into the router command it hands the agent. Each Antigravity conversation therefore gets its own memory session inside the project (the project comes from the workspace folder), and a new chat in the same project starts a new branch instead of joining the previous one. Within one conversation the session never expires, whatever `auto_session_minutes` says; that setting only applies to calls from outside Antigravity.
-
-Antigravity's own work: the plugin's `Stop` hook fires when an Antigravity turn ends normally and starts a detached `memory record-agy`, which reads Antigravity's transcript and records the user's request and the agent's final answer as a turn of the same conversation's session (engine `antigravity/<model>`). Thinking steps and tool output are not recorded, a turn is recorded once, and turns that ran the router are skipped because the router already recorded them. So router engines see what the agent did on its own (also with the extension's actor switched off), and later conversations can find it.
-
-A new Antigravity conversation gets a short memory index from the `SessionStart` hook: the latest turns of the project's most recent sessions and the commands that read more (`memory search`, `memory session show`, `memory turn show`). The rule file tells the agent to read memory before redoing earlier work; those commands only read and are allowed without `[AI Factory]`. The command the hook hands the agent starts with `--session <conversation>`, which the memory commands take as their default session.
-
-Report line: with memory enabled, every execution report ends with a `memory:` line naming the project and session, what the memory block gave the engine and whether the turn was saved:
-
-```
-memory: project=billing, session=r, injected=2 turn(s) + 1 note(s) (~340/1200 tokens), saved=turn 3
-memory: project=billing, session=0193a2f1, injected=none (task too short), saved=turn 4
-```
-
-`injected=none` gives the reason: empty project memory, nothing relevant found, task too short, the resumed engine session already up to date, or a nested router call. The Antigravity rule tells the agent to quote this line in its summary.
-
-Handoffs: when a call ends in a Gemini handoff, or every engine fails, memory writes an open handoff and the report gains a `handoff: <id>` line. The plugin hook shows open handoffs for the current project to Antigravity, inside the same untrusted block, together with the command that takes one. A router engine sees open handoffs addressed to it (or to `any`) in its block, and a successful call takes them. Taking a handoff succeeds exactly once, however many agents try at the same time.
+`scripts/memory-eval.mjs` runs 25 Turkish and English scenarios that measure what reaches the engine: follow-ups, recall within and across
+sessions and engines, decision updates, abstention, project isolation, standing rules, dead ends, handoffs, file changes, error recovery,
+long and hostile replies and budget pressure.
 
 ```bash
-node router.mjs memory handoff begin --to codex --task "Port the CSV exporter to streams" --cwd <project>
-node router.mjs memory handoff list --cwd <project>
-node router.mjs memory handoff accept <id> --cwd <project>
-```
-
-Each model entry in `engines.*.models` also has `memory_budget_tokens`: 800 for the free Vibe, OpenCode and Muse models, 2000 for Codex and Claude. Tokens are estimated as characters divided by 4; Turkish runs closer to 3 characters per token, so real counts are about a third higher.
-
-Session state: in a long conversation the oldest turns no longer fit the block. After a finished turn, when the session has at least `state_min_turns` turns and the stored state is `state_every_turns` behind, the router starts a detached helper (the call returns at once) that asks the cheap `state_engine` for a typed state note: goal, decisions, constraints, the latest answers with their key numbers and codes, dead ends, open questions, files and the next step. Every item cites the turns it comes from and is dropped otherwise, so `memory turn show <n>` can always check it. The block then shows the state followed by the turns after it (the newest two covered turns stay as raw lines) and says that older turns are condensed. The helper runs at depth 1 with `--no-memory`, so its call is never recorded or fed back, writes only if no newer state exists, and any failure leaves the plain block in charge. It costs one free-model call per `state_every_turns` turns beyond `state_min_turns`.
-
-```bash
-node router.mjs memory state show --session <sid> --cwd <project>
-node router.mjs memory state update --session <sid> --cwd <project> --force
-```
-
-The full recorded reply of any turn:
-
-```bash
-node router.mjs memory turn show <n> --session <sid> --cwd <project> [--max-bytes 20000]
-```
-
-#### Response language
-
-Whatever language you write in, the engines think and answer in English, and write documents and comments in English, unless your request explicitly asks for another language. `response_language` in `router_config.json` (default `"English"`; `""` switches it off, any other language name works) puts one `[AI Factory] Language: …` line in front of every engine prompt. The Antigravity rule file says the same to the Antigravity agent, and the background session state is written in English too.
-
-#### Memory eval harness
-
-`scripts/memory-eval.mjs` measures what reaches the engine across whole conversations: follow-ups ("emin misin", "devam et", "why?"), recall within and across sessions and engines, decision updates, abstention, project isolation, standing rules, dead ends, handoffs, file changes, error recovery, long and hostile replies, and budget pressure (24 Turkish and English scenarios in `src/memory/eval/scenarios.mjs`). Plan and findings: [docs/memory-harness-plan.md](docs/memory-harness-plan.md).
-
-```bash
-node scripts/memory-eval.mjs                                   # layer 1: fake engines, no LLM, ~15 s
+npm run eval                                                      # fake engines, no model calls, about 15 s
 node scripts/memory-eval.mjs --sweep conversation_tokens=0,800,1600,2400
 AI_FACTORY_LIVE=1 node scripts/memory-eval.mjs --live --engines vibe/vibe-glm-5.3-flash,muse,claude
-node scripts/memory-eval.mjs --export <project> <session> --name <file>   # then add probes to the file
-AI_FACTORY_LIVE=1 node scripts/memory-eval.mjs --live --replay
+node scripts/memory-eval.mjs --export <project> <session> --name <file>   # replay a real conversation (never committed)
 ```
 
-Layer 1 seeds each scenario's history, sends one request through the real router to a fake engine and scores the prompt that engine received; `node --test` fails when a scenario does worse than `src/memory/eval/baseline.json`. The live layer sends the same request to real engines and has a judge grade the answer: by default the cheapest fast model, `vibe/vibe-glm-5.3-flash`, called with memory off (`--judge engine/model` to change it). Replays are your own conversations exported to `.runtime/memory-eval/replays/`, which is never committed. Reports go to `.runtime/memory-eval/`.
-
-### Live Quota Status Check
-```bash
-node router.mjs --quota
-```
-Or via PowerShell:
-```powershell
-.\check_quotas.ps1
-```
+The deterministic layer sends one request through the real router to a fake engine and scores the prompt it received; `npm test` fails when
+a scenario does worse than `src/memory/eval/baseline.json`. The live layer asks real engines and has a cheap judge model grade the answers
+(default `vibe/vibe-glm-5.3-flash`, called with memory off). Reports go to `.runtime/memory-eval/`. `npm run bench` measures the write and
+read paths. Design and results: [docs/memory-plan.md](docs/memory-plan.md), [docs/memory-harness-plan.md](docs/memory-harness-plan.md).
 
 ---
+
+## Antigravity and the browser extension
+
+`npm run deploy` (`node deploy_skill.mjs`) installs the plugin into `~/.gemini/config/plugins/ai-factory/` and backs up the previous
+copy to `~/.gemini/config/plugin-backups/`; `node deploy_skill.mjs --builtin` also installs the skill into the Antigravity CLI, Core and IDE
+skill catalogs. Start a new Antigravity session afterwards, and move any `ai-factory.backup-*` folders out of `~/.gemini/config/plugins/`
+so Antigravity cannot load old rules as extra plugins.
+
+The plugin's hooks (`SessionStart`, `PreInvocation`, `PreToolUse`, `Stop`) inject the routing rule with the router command (carrying `--session <conversationId>`),
+show open handoffs and the memory index, deny direct headless `claude -p` launches, repository reads that should go through the router and
+folder removals that need your approval, and record Antigravity's own turns. The agent uses the router only when your message starts with
+`[AI Factory]` or you ask for it or an engine by name; for long delegated work it is told to schedule status checks at 30, 120 and 240 seconds.
+
+[browser-extension/](browser-extension/README.md) adds an **actor / critic** bar above the Antigravity prompt box: the actor runs your task on
+the engine and model you pick, the critic reviews the result, and the choice becomes an instruction in front of your prompt. With both switched
+off the prompt is sent untouched and nothing is routed or recorded. Load it unpacked from `chrome://extensions`; after changing
+`router_config.json` run `npm run build:extension`.
+
+---
+
+## Configuration
+
+| What | Where |
+|---|---|
+| Engines, models, fallback chain, routing keywords, watchdog, circuit breaker, memory, response language | `router_config.json` |
+| Project name and ignored paths for one repository | `.ai-factory.toml` in the project root (`project = "name"`, `ignore_paths = [...]`) |
+| Where state lives | `AI_FACTORY_DATA_DIR` (default `.runtime/`) |
+| Another configuration file | `AI_FACTORY_CONFIG` |
+| Another plugin target | `AI_FACTORY_PLUGIN_DIR` (default `~/.gemini/config/plugins/ai-factory`) |
+| Force a session id | `AI_FACTORY_SESSION_ID` |
+| Real-engine checks | `AI_FACTORY_LIVE=1` |
+
+`AI_FACTORY_ROUTER_DEPTH` is set by the router itself on the processes it starts; at depth 2 or more it stops recursion.
+
+## Repository layout
+
+```text
+ai_factory/
+├── router.mjs                  # CLI entry point (runs src/router.mjs)
+├── quota_tracker.mjs           # CLI entry point for the quota report
+├── deploy_skill.mjs            # Installs the Antigravity plugin and skill
+├── router_config.json          # Engines, models, chain, watchdog, memory, language
+├── src/                        # The router, watchdog, quota tracker, stream capture (+ tests)
+│   └── memory/                 # The memory layer (+ tests)
+│       ├── eval/               #   eval harness: scenarios, runner, live layer, baseline
+│       └── testing/            #   test infrastructure: fake engine CLIs, fixtures
+├── lib/                        # Path resolution and plugin installation
+├── plugins/ai-factory/         # The Antigravity plugin: hooks, rules, skill
+├── browser-extension/          # Actor / critic picker for the Antigravity web UI
+├── scripts/                    # setup, check, eval, bench, reports (.mjs and .ps1)
+├── docs/                       # Architecture, memory design, harness plan, diagrams
+├── CONTRIBUTING.md  LICENSE
+└── .runtime/                   # Local state (never committed)
+```
+
+## Development
+
+```bash
+npm test               # all tests; engines are replaced by fake CLIs
+npm run check          # environment and configuration check
+npm run eval           # memory eval harness (deterministic layer)
+npm run bench          # memory read/write benchmark
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, conventions and what a change to the memory needs (a scenario or a test).
+
+## Documentation
+
+| Document | What it covers |
+|---|---|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Routing policy, report contract, Antigravity hooks, memory module map |
+| [docs/memory-plan.md](docs/memory-plan.md) | Memory design, storage format, security, test plan and every deviation |
+| [docs/memory-harness-plan.md](docs/memory-harness-plan.md) | The eval harness, the follow-up findings, what was built and measured |
+| [docs/diagrams/](docs/diagrams) | Interactive system and routing diagrams (open the HTML files locally) |
+| [browser-extension/README.md](browser-extension/README.md) | The actor / critic extension |
 
 ## Security
 
-- Local session and quota registries are listed in `.gitignore` to prevent accidental commits.
-- Muse integration is hard-locked to `muse-spark-1.3-contributor`, preventing accidental charges from billed models.
-- OpenCode and Claude model IDs are checked before either CLI starts. Claude still uses your own account and may be billed.
-
----
+- Local state, session registries, tokens and `.env` files are git-ignored.
+- Model IDs are checked before an engine starts: OpenCode accepts only listed free models, Claude only the configured models, Muse is locked to
+  its contributor model. Claude and Codex use your own accounts and may be billed.
+- Recorded conversation text is treated as data, never as instructions: it is neutralised before it reaches an engine, secrets are masked
+  before anything is written, and nothing from memory is ever written to a file an agent loads on its own.
+- The hook denies removing a folder without your approval and direct headless Claude launches.
 
 ## License
-MIT License
+
+[MIT](LICENSE)

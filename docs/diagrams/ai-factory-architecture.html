@@ -5037,9 +5037,9 @@
         <path data-edge-from="hooks" data-edge-to="router" data-edge-label="CLI call" data-edge-key="1" data-composition-points="400,325;514,325" d="M 400 325 L 514 325" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
         <path data-edge-from="policy" data-edge-to="router" data-edge-label="model allowlist" data-edge-key="2" data-composition-points="574,118;574,302" d="M 574 118 L 574 302" class="a-security" stroke-width="1.5" marker-end="url(#arrowhead-security)"/>
         <path data-edge-from="router" data-edge-to="registry" data-edge-label="sessions and health" data-edge-key="3" data-composition-points="574,362;574,546" d="M 574 362 L 574 546" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-                <path data-edge-from="router" data-edge-to="muse" data-edge-label="default / fallback" data-edge-key="4" data-composition-points="634,332;808,332;808,210;982,210" d="M 634 332 L 800 332 Q 808 332 808 324 L 808 218 Q 808 210 816 210 L 982 210" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="router" data-edge-to="codex" data-edge-label="fallback / explicit" data-edge-key="5" data-composition-points="634,332;982,332" d="M 634 332 L 982 332" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="router" data-edge-to="opencode" data-edge-label="free selection" data-edge-key="6" data-composition-points="634,332;808,332;808,454;982,454" d="M 634 332 L 800 332 Q 808 332 808 340 L 808 446 Q 808 454 816 454 L 982 454" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+                <path data-edge-from="router" data-edge-to="muse" data-edge-label="last free step" data-edge-key="4" data-composition-points="634,332;808,332;808,210;982,210" d="M 634 332 L 800 332 Q 808 332 808 324 L 808 218 Q 808 210 816 210 L 982 210" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="router" data-edge-to="codex" data-edge-label="explicit only" data-edge-key="5" data-composition-points="634,332;982,332" d="M 634 332 L 982 332" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="router" data-edge-to="opencode" data-edge-label="named, free only" data-edge-key="6" data-composition-points="634,332;808,332;808,454;982,454" d="M 634 332 L 800 332 Q 808 332 808 340 L 808 446 Q 808 454 816 454 L 982 454" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         <path data-edge-from="router" data-edge-to="claude" data-edge-label="paid selection" data-edge-key="7" data-composition-points="634,332;808,332;808,576;982,576" d="M 634 332 L 800 332 Q 808 332 808 340 L 808 568 Q 808 576 816 576 L 982 576" class="a-security" stroke-width="1.5" marker-end="url(#arrowhead-security)"/>
         <path data-edge-from="router" data-edge-to="gemini" data-edge-label="final handoff" data-edge-key="8" data-composition-points="514,339;490,339;490,576;166,576" d="M 514 339 L 498 339 Q 490 339 490 347 L 490 568 Q 490 576 482 576 L 166 576" class="a-dashed" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
 
@@ -5189,15 +5189,15 @@
 
         <g data-detail="context" data-edge-from="router" data-edge-to="muse" data-edge-label="fallback" data-edge-key="4">
           <rect x="879.8" y="200" width="48.4" height="14" rx="3" class="c-mask"/>
-          <text x="904" y="210" class="t-muted" font-size="8" text-anchor="middle">default / fallback</text>
+          <text x="904" y="210" class="t-muted" font-size="8" text-anchor="middle">last free step</text>
         </g>
-        <g data-detail="context" data-edge-from="router" data-edge-to="codex" data-edge-label="fallback / explicit" data-edge-key="5">
+        <g data-detail="context" data-edge-from="router" data-edge-to="codex" data-edge-label="explicit only" data-edge-key="5">
           <rect x="853.4" y="322" width="101.2" height="14" rx="3" class="c-mask"/>
-          <text x="904" y="332" class="t-muted" font-size="8" text-anchor="middle">fallback / explicit</text>
+          <text x="904" y="332" class="t-muted" font-size="8" text-anchor="middle">explicit only</text>
         </g>
-        <g data-detail="context" data-edge-from="router" data-edge-to="opencode" data-edge-label="free selection" data-edge-key="6">
+        <g data-detail="context" data-edge-from="router" data-edge-to="opencode" data-edge-label="named, free only" data-edge-key="6">
           <rect x="865.4" y="444" width="77.2" height="14" rx="3" class="c-mask"/>
-          <text x="904" y="454" class="t-muted" font-size="8" text-anchor="middle">free selection</text>
+          <text x="904" y="454" class="t-muted" font-size="8" text-anchor="middle">named, free only</text>
         </g>
         <g data-detail="context" data-edge-from="router" data-edge-to="claude" data-edge-label="paid selection" data-edge-key="7">
           <rect x="865.4" y="566" width="77.2" height="14" rx="3" class="c-mask"/>
@@ -5430,8 +5430,8 @@
           <h3>Selection</h3>
         </div>
         <ul>
-          <li>&bull; Routine tasks start with Muse</li>
-          <li>&bull; OpenCode and Claude can be selected explicitly</li>
+          <li>&bull; Routine tasks start with Vibe (GLM 5.3 Flash)</li>
+          <li>&bull; OpenCode, Codex and Claude run only when named</li>
         </ul>
       </div>
 
