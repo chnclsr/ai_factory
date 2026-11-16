@@ -797,6 +797,17 @@ function extractSessionId(output) {
   return match ? match[1] : null;
 }
 
+// The engines work in one language whatever language the request is written in: the same line
+// goes in front of every engine prompt (a stable prefix, so it also suits prompt caching).
+// router_config.json response_language sets it; an empty value switches the line off.
+function languageDirective(config) {
+  const language = String(config?.response_language ?? '').trim();
+  if (!language) return '';
+  return `[AI Factory] Language: think and work in ${language}. Reply in ${language} and write any document, comment or message in ${language}, ` +
+    'even when the request below is in another language, unless the request itself explicitly asks for a different language. ' +
+    'Keep code, commands, file names and quoted text exactly as they are.';
+}
+
 // Memory layer (docs/memory-plan.md). Loaded only when enabled, so a disabled config runs exactly
 // the code path it always did; a load failure is logged and the task continues without memory.
 async function loadMemory(config) {
@@ -984,7 +995,11 @@ Kullan\u0131m:
     }
     let classified;
     try {
-      const prompt = memory ? memory.buildPrompt(options.task, { ctx: memoryCtx, engine, model, engineSessionId: attempt.sessionId, attemptIndex: index, errors }) : options.task;
+      const basePrompt = memory ? memory.buildPrompt(options.task, { ctx: memoryCtx, engine, model, engineSessionId: attempt.sessionId, attemptIndex: index, errors }) : options.task;
+      const directive = languageDirective(config);
+      const prompt = directive ? `${directive}
+
+${basePrompt}` : basePrompt;
       const res = await executors[engine](prompt, model, options.cwd, attempt.sessionId, config);
       lastOutput = res.output;
       lastReply = res.reply ?? res.output;

@@ -138,7 +138,7 @@ export function buildStatePrompt({ turns, previous, replyOf }) {
     `- Cite in "turns" the turn numbers (1 to ${through}) each item comes from. An item without a real turn number is dropped.`,
     '- "answer": the conclusion of each recent substantive answer, with the key numbers, names and codes copied exactly. A short follow-up such as "are you sure?" refers to the latest one.',
     '- "constraint": requirements that were added or tightened. "decision": choices made, newest wins over older ones. "tried_failed": approaches that did not work. "open_question": unresolved points. "file": files that matter.',
-    '- Keep the language of the conversation. At most 25 items, each under 250 characters. Merge duplicates. Drop small talk and routine acknowledgements.',
+    '- Write the note in English whatever language the conversation uses; copy names, numbers, codes and quoted terms exactly. At most 25 items, each under 250 characters. Merge duplicates. Drop small talk and routine acknowledgements.',
     '- Give a routine, repeated or trivial step no item of its own: fold a run of them into one "fact" (for example "steps 2-11 completed, nothing notable" citing the first and last turn). At most 6 "answer" items, only for answers that carry a conclusion, a number or a code.',
     '- Keep still-valid items of the previous state; remove or rewrite the ones the new turns contradict.',
     '',

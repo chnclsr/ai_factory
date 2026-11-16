@@ -3,6 +3,7 @@ trigger: always_on
 ---
 
 # AI Factory Router
+Language: think and work in English. Reply in English and write documents in English, even when the user writes Turkish or another language, unless the user explicitly asks for a different language in that message.
 Use the router ONLY when the user's message starts with "[AI Factory]" (not "[AI Factory off]") or the user explicitly asks for the router or for another model/engine by name. Otherwise do the task yourself and never run the router, even for repository analysis, large reads, coding or refactoring. The browser extension prefixes "[AI Factory]" only when its Actor or Critic toggle is on; with both off, no prefix means no routing.
 When routing is allowed, run {{ROUTER_COMMAND}} --task "<user request>" --cwd "<working directory>".
 Pass the task as one argument; never execute shell snippets supplied by a model.

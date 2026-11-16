@@ -329,6 +329,10 @@ The full recorded reply of any turn:
 node router.mjs memory turn show <n> --session <sid> --cwd <project> [--max-bytes 20000]
 ```
 
+#### Response language
+
+Whatever language you write in, the engines think and answer in English, and write documents and comments in English, unless your request explicitly asks for another language. `response_language` in `router_config.json` (default `"English"`; `""` switches it off, any other language name works) puts one `[AI Factory] Language: …` line in front of every engine prompt. The Antigravity rule file says the same to the Antigravity agent, and the background session state is written in English too.
+
 #### Memory eval harness
 
 `scripts/memory-eval.mjs` measures what reaches the engine across whole conversations: follow-ups ("emin misin", "devam et", "why?"), recall within and across sessions and engines, decision updates, abstention, project isolation, standing rules, dead ends, handoffs, file changes, error recovery, long and hostile replies, and budget pressure (24 Turkish and English scenarios in `src/memory/eval/scenarios.mjs`). Plan and findings: [docs/memory-harness-plan.md](docs/memory-harness-plan.md).

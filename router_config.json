@@ -1,4 +1,5 @@
 {
+  "response_language": "English",
   "version": "1.2.0",
   "policy": "token_saver_offload",
   "description": "Antigravity minimal token harcar; isler once Vibe modellerine, sonra Muse Contributor modeline delege edilir.",
