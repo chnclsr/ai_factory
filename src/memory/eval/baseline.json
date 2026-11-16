@@ -1,17 +1,17 @@
 {
-  "version": "926db26",
-  "date": "2026-11-16T08:13:19.363Z",
+  "version": "8320c9f",
+  "date": "2026-11-16T08:17:35.465Z",
   "summary": {
     "scenarios": 23,
-    "passed": 14,
-    "coverage": 0.609,
-    "gatedCoverage": 0.684,
+    "passed": 21,
+    "coverage": 0.913,
+    "gatedCoverage": 1,
     "overBudget": 0,
     "byCategory": {
       "followup": {
         "scenarios": 5,
-        "passed": 0,
-        "coverage": 0
+        "passed": 5,
+        "coverage": 1
       },
       "capture": {
         "scenarios": 1,
@@ -20,8 +20,8 @@
       },
       "session-recall": {
         "scenarios": 1,
-        "passed": 0,
-        "coverage": 0
+        "passed": 1,
+        "coverage": 1
       },
       "cross-engine": {
         "scenarios": 1,
@@ -50,8 +50,8 @@
       },
       "instruction-persistence": {
         "scenarios": 1,
-        "passed": 0,
-        "coverage": 0
+        "passed": 1,
+        "coverage": 1
       },
       "constraint-retention": {
         "scenarios": 1,
@@ -95,36 +95,36 @@
       "id": "followup-sure-tr",
       "category": "followup",
       "gate": true,
-      "pass": false,
-      "coverage": 0
+      "pass": true,
+      "coverage": 1
     },
     {
       "id": "followup-sure-en",
       "category": "followup",
       "gate": true,
-      "pass": false,
-      "coverage": 0
+      "pass": true,
+      "coverage": 1
     },
     {
       "id": "followup-continue-tr",
       "category": "followup",
       "gate": true,
-      "pass": false,
-      "coverage": 0
+      "pass": true,
+      "coverage": 1
     },
     {
       "id": "followup-why-en",
       "category": "followup",
       "gate": true,
-      "pass": false,
-      "coverage": 0
+      "pass": true,
+      "coverage": 1
     },
     {
       "id": "followup-long-answer-tr",
       "category": "followup",
       "gate": true,
-      "pass": false,
-      "coverage": 0
+      "pass": true,
+      "coverage": 1
     },
     {
       "id": "capture-long-plain-reply",
@@ -137,8 +137,8 @@
       "id": "session-recall-tr",
       "category": "session-recall",
       "gate": true,
-      "pass": false,
-      "coverage": 0
+      "pass": true,
+      "coverage": 1
     },
     {
       "id": "cross-engine-en",
@@ -186,8 +186,8 @@
       "id": "instruction-persistence-en",
       "category": "instruction-persistence",
       "gate": false,
-      "pass": false,
-      "coverage": 0
+      "pass": true,
+      "coverage": 1
     },
     {
       "id": "constraint-retention-tr",

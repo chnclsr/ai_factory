@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { makeHarness, memoryBlock, FAKE_SESSION_IDS, configuredModels } from './router-harness.mjs';
 import { initFixtureRepo, commitAll } from './test-helpers.mjs';
-import { estimateTokens, buildPrompt, budgetFor } from './pack.mjs';
+import { estimateTokens, buildPrompt, budgetFor, shortenMiddle } from './pack.mjs';
 import { snapshotProject } from './store.mjs';
 import { listSessions, readTurns } from './session.mjs';
 import { resolveProject } from './project.mjs';
@@ -153,7 +153,8 @@ test('A7: switching models in one session hands over the chat turns and per-turn
   assert.equal(result.status, 0, result.stdout + result.stderr);
   const codexBlock = memoryBlock(h.lastCall().prompt);
   assert.ok(codexBlock, 'codex must receive the session history');
-  assert.match(codexBlock, /turn 1 \(claude\/claude-haiku-5-5\): Rewrite a\.txt so the second line explains the plan → Claude rewrote line 2 of a\.txt/);
+  // With a conversation budget the reply sits verbatim on its own indented lines under the turn.
+  assert.match(codexBlock, /turn 1 \(claude\/claude-haiku-5-5\): Rewrite a\.txt so the second line explains the plan\n  reply:\n  Claude rewrote line 2 of a\.txt/);
   assert.match(codexBlock, /changed: a\.txt \+2 −1/);
 
   result = h.run(['--resume', 'sw', '--engine', 'claude', '--no-fallback', '--cwd', repo, '--task', 'Continue: finish the plan text in a.txt'], {
@@ -194,4 +195,32 @@ test('nested router calls (AI_FACTORY_ROUTER_DEPTH > 0) inject nothing', t => {
     { extraEnv: { AI_FACTORY_ROUTER_DEPTH: '1' } });
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.equal(memoryBlock(h.lastCall().prompt), null);
+});
+
+test('shortenMiddle keeps the start and the end and names the turn to fetch', () => {
+  const text = 'A'.repeat(500) + 'MIDDLE' + 'Z'.repeat(500);
+  const short = shortenMiddle(text, 300, 7);
+  assert.ok(short.length <= 300, String(short.length));
+  assert.ok(short.startsWith('AAAA'));
+  assert.ok(short.endsWith('ZZZZ'));
+  assert.match(short, /characters skipped, full reply: turn 7/);
+  assert.equal(shortenMiddle('short', 300, 1), 'short');
+});
+
+test('conversation budget: a long answer behind short turns survives, newest turn last, old mode unchanged', t => {
+  const h = makeHarness(t);
+  const cwd = workDir(h, 'conv');
+  const claude = ['--engine', 'claude', '--model', 'haiku-5.5', '--no-fallback', '--session', 'conv', '--cwd', cwd];
+  const long = 'Findings. '.repeat(120) + 'Conclusion: the bottleneck is CPU data preparation (KESTREL-41).';
+  assert.equal(h.run([...claude, '--task', 'where is the training bottleneck?'], { actions: { response: long } }).status, 0);
+  for (const task of ['thanks', 'ok', 'noted']) assert.equal(h.run([...claude, '--task', task], { actions: { response: 'Fine.' } }).status, 0);
+  assert.equal(h.run([...claude, '--task', 'are you sure?']).status, 0);
+  const block = memoryBlock(h.lastCall().prompt);
+  assert.match(block, /KESTREL-41/);
+  assert.ok(block.indexOf('turn 4 (') > block.indexOf('turn 1 ('), 'turns oldest first, newest last');
+
+  h.writeConfig(cfg => { cfg.memory.conversation_tokens = 0; for (const m of Object.values(cfg.engines.claude.models)) delete m.memory_conversation_tokens; });
+  assert.equal(h.run([...claude, '--task', 'are you sure?']).status, 0);
+  const old = memoryBlock(h.lastCall().prompt);
+  assert.doesNotMatch(old, /KESTREL-41/, 'conversation_tokens 0 keeps the old clipped lines');
 });

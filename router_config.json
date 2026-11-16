@@ -182,7 +182,8 @@
             "gpt-6 luna",
             "6-luna"
           ],
-          "memory_budget_tokens": 2000
+          "memory_budget_tokens": 2000,
+          "memory_conversation_tokens": 4000
         },
         "gpt-5.6-luna": {
           "id": "gpt-5.6-luna",
@@ -195,7 +196,8 @@
             "5.6-luna",
             "5.6 luna"
           ],
-          "memory_budget_tokens": 2000
+          "memory_budget_tokens": 2000,
+          "memory_conversation_tokens": 4000
         },
         "gpt-5.6-terra": {
           "id": "gpt-5.6-terra",
@@ -208,7 +210,8 @@
             "5.6-terra",
             "5.6 terra"
           ],
-          "memory_budget_tokens": 2000
+          "memory_budget_tokens": 2000,
+          "memory_conversation_tokens": 4000
         }
       }
     },
@@ -224,7 +227,8 @@
             "haiku",
             "haiku 5.5"
           ],
-          "memory_budget_tokens": 2000
+          "memory_budget_tokens": 2000,
+          "memory_conversation_tokens": 4000
         },
         "haiku-4.5": {
           "id": "claude-haiku-4-5-20251001",
@@ -233,7 +237,8 @@
           "aliases": [
             "haiku 4.5"
           ],
-          "memory_budget_tokens": 2000
+          "memory_budget_tokens": 2000,
+          "memory_conversation_tokens": 4000
         },
         "sonnet-5": {
           "id": "claude-sonnet-5",
@@ -242,7 +247,8 @@
           "aliases": [
             "sonnet 5"
           ],
-          "memory_budget_tokens": 2000
+          "memory_budget_tokens": 2000,
+          "memory_conversation_tokens": 4000
         },
         "sonnet-5.5": {
           "id": "claude-sonnet-5-5",
@@ -252,7 +258,8 @@
             "sonnet",
             "sonnet 5.5"
           ],
-          "memory_budget_tokens": 2000
+          "memory_budget_tokens": 2000,
+          "memory_conversation_tokens": 4000
         },
         "opus-5.5": {
           "id": "claude-opus-5-5",
@@ -263,7 +270,8 @@
             "opus-5.5",
             "opus-5-5"
           ],
-          "memory_budget_tokens": 2000
+          "memory_budget_tokens": 2000,
+          "memory_conversation_tokens": 4000
         }
       }
     }
@@ -282,7 +290,9 @@
     "index": true,
     "vector": {
       "enabled": false
-    }
+    },
+    "conversation_tokens": 1600,
+    "l2_tokens": 600
   },
   "watchdog": {
     "initial_timeout_ms": 30000,

@@ -180,7 +180,10 @@ export async function runScenario(scenario, { dir, mutateConfig } = {}) {
       return { id: scenario.id, category: scenario.category, lang: scenario.lang, gate: Boolean(scenario.gate),
         pass: false, coverage: 0, error: `no engine call (exit ${run.status}): ${run.stdout.slice(-300)}`, memoryLine, ms: Date.now() - started };
     }
-    const score = scorePrompt(scenario, call.prompt, probe.task, budgetOf(config, { engine: call.engine, model: probe.model }));
+    // The router reports the budget it used (it includes any conversation share); fall back to config.
+    const reported = memoryLine.match(/~\d+\/(\d+) tokens/);
+    const budget = reported ? Number(reported[1]) : budgetOf(config, { engine: call.engine, model: probe.model });
+    const score = scorePrompt(scenario, call.prompt, probe.task, budget);
     return { id: scenario.id, category: scenario.category, lang: scenario.lang, gate: Boolean(scenario.gate),
       engine: call.engine, ...score, memoryLine, probeMs: run.ms, ms: Date.now() - started };
   } catch (err) {

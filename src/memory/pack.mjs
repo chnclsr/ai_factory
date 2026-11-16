@@ -25,8 +25,70 @@ export const PACK_DEFAULTS = Object.freeze({
   l0_tokens: 300,
   l1_tokens: 400,
   recent_turns_verbatim: 3,
-  l2_recent_sessions: 50
+  l2_recent_sessions: 50,
+  // Tokens (characters / 4) for this session's own turns, on top of the model's memory budget.
+  // 0 keeps the old fixed-width L1 lines. A model's memory_conversation_tokens overrides it.
+  conversation_tokens: 0,
+  // With a conversation budget, related items from other sessions get their own share.
+  l2_tokens: 600
 });
+
+// Marker left where a reply was shortened; the turn number lets the engine fetch the rest.
+export function shortenMiddle(text, maxChars, n) {
+  const value = String(text || '');
+  if (value.length <= maxChars) return value;
+  const marker = `\n[… ${value.length - maxChars} characters skipped, full reply: turn ${n}]\n`;
+  const room = Math.max(0, maxChars - marker.length);
+  const head = Math.floor(room * 0.7);
+  return value.slice(0, head).trimEnd() + marker + value.slice(value.length - (room - head)).trimStart();
+}
+
+export function conversationBudgetFor(routerConfig, engine, model, settings = PACK_DEFAULTS) {
+  const models = routerConfig?.engines?.[engine]?.models || {};
+  const entry = models[model] || Object.values(models).find(m => m.id === model);
+  const value = entry?.memory_conversation_tokens ?? settings.conversation_tokens ?? 0;
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+function fullReply(snapshot, turn) {
+  if (turn.response_ref) {
+    const text = snapshot.read(turn.response_ref);
+    if (typeof text === 'string' && text) return text;
+  }
+  return String(turn.response_head || '');
+}
+
+// This session's turns within `budget` tokens, newest first: each turn may take at most half of
+// what is left, so three short turns cannot crowd out the long answer behind them, and the answer
+// is shortened in the middle instead of being dropped. Turns that no longer fit even as one line
+// are counted, not shown. Returns the kept candidates (oldest first) and the omitted count.
+function conversationLines(snapshot, turns, budget, sid) {
+  const kept = [];
+  let remaining = budget;
+  let omitted = 0;
+  for (const turn of [...turns].reverse()) {
+    const files = describeFiles(turn.files);
+    const label = `- turn ${turn.n} (${turn.engine}/${turn.model}${turn.ok ? '' : ', failed'}): ${clip(turn.task, 300)}`;
+    const source = { kind: 'turn', sid, n: turn.n, seq: turn.seq, hash: shortHash(turnSource(turn)) };
+    const reply = fullReply(snapshot, turn).replace(/\r\n?/g, '\n').trim();
+    const fixed = estimateTokens(label + (files ? `\n  ${files}` : '')) + 4;
+    const allowance = Math.floor(remaining / 2);
+    let line = null;
+    if (allowance - fixed >= 40) {
+      const body = shortenMiddle(reply, (allowance - fixed) * 4, turn.n);
+      line = `${label}\n  reply:\n${body.split('\n').map(l => `  ${l}`).join('\n')}${files ? `\n  ${files}` : ''}`;
+    } else {
+      const compact = `- turn ${turn.n} (${turn.engine}): ${clip(turn.task, 80)} → ${clip(reply, 120)}`;
+      if (estimateTokens(compact) + 1 <= remaining) line = compact;
+    }
+    if (!line) { omitted++; continue; }
+    const cost = estimateTokens(line) + 1;
+    remaining -= cost;
+    kept.push({ line, order: turn.n, source });
+  }
+  kept.sort((a, b) => a.order - b.order);
+  return { kept, used: budget - remaining, omitted };
+}
 
 const CACHE_LIMIT = 256;
 const memo = new Map();
@@ -130,7 +192,10 @@ export function clearPackMemo() {
 // Returns { text, tokens, budget, injected, knownSeq, headSeq, cache, gated? }.
 export function buildPack(req) {
   const settings = { ...PACK_DEFAULTS, ...(req.settings || {}) };
-  const budget = req.budget ?? budgetFor(req.routerConfig, req.engine, req.model, settings);
+  // With a conversation budget the session's own turns get their own share on top of the model's
+  // memory budget (which then covers handoffs, errors and related items).
+  const conversationBudget = conversationBudgetFor(req.routerConfig, req.engine, req.model, settings);
+  const budget = (req.budget ?? budgetFor(req.routerConfig, req.engine, req.model, settings)) + conversationBudget;
   const empty = extra => ({ text: '', tokens: 0, budget, injected: [], ...extra });
   const task = String(req.task || '');
   // A short task ("emin misin", "devam et") is usually a follow-up. It still gets the session's own
@@ -198,16 +263,22 @@ export function buildPack(req) {
   });
   // The conversation itself gets at least 60% of the budget: a fixed 400 tokens held about three
   // turns even on a 2000-token model, so longer sessions lost their earlier answers.
-  const l1Fill = fill(l1Candidates, Math.min(Math.max(settings.l1_tokens, Math.floor(budget * 0.6)), remaining));
+  const l1Fill = conversationBudget > 0
+    ? conversationLines(snapshot, sessionTurns, Math.min(conversationBudget, remaining), req.sid)
+    : fill(l1Candidates, Math.min(Math.max(settings.l1_tokens, Math.floor(budget * 0.6)), remaining));
+  let conversationSection = null;
   if (l1Fill.kept.length) {
     const kept = [...l1Fill.kept].sort((a, b) => a.order - b.order);
     const engines = [...new Set(sessionTurns.map(t => t.engine))].join(', ');
+    const omitted = l1Fill.omitted ? ` ${l1Fill.omitted} older turn(s) did not fit and are not shown.` : '';
     // The new request continues this conversation. Without saying so, a follow-up like
     // "emin misin" or "devam et" read as a request with no subject and the engine asked what it meant.
-    sections.push(`This conversation so far, oldest first (${sessionTurns.length} turn(s) you have not seen; engines: ${engines}). ` +
+    conversationSection = `This conversation so far, oldest first (${sessionTurns.length} turn(s) you have not seen; engines: ${engines}).${omitted} ` +
       'The new request after this block is the user\'s next message in it: a short follow-up such as "are you sure?", ' +
       '"continue" or "why?" refers to the latest turn that gave a substantive answer, whichever engine wrote it.\n' +
-      kept.map(c => c.line).join('\n'));
+      kept.map(c => c.line).join('\n');
+    // Without a conversation budget the old order stays: the conversation before related items.
+    if (!conversationBudget) sections.push(conversationSection);
     remaining -= l1Fill.used + 12;
   }
 
@@ -255,9 +326,11 @@ export function buildPack(req) {
         return { ...c, score: queryTerms.reduce((n, t) => n + (lower.includes(t) ? 1 : 0), 0) };
       }).filter(c => c.score > 0).sort((a, b) => b.score - a.score || b.source.seq - a.source.seq).slice(0, settings.max_pages);
     }
-    l2Fill = fill(ranked, remaining - 8);
+    l2Fill = fill(ranked, conversationBudget ? Math.min(settings.l2_tokens, remaining - 8) : remaining - 8);
     if (l2Fill.kept.length) sections.push('Related in this project:\n' + l2Fill.kept.map(c => c.line).join('\n'));
   }
+  // The newest turn goes last, next to the new request, so nothing after it competes for attention.
+  if (conversationBudget && conversationSection) sections.push(conversationSection);
   const injected = [...l0Fill.kept, ...l1Fill.kept, ...l2Fill.kept].map(c => c.source).filter(Boolean);
 
   let pack;
@@ -270,7 +343,8 @@ export function buildPack(req) {
     let text = `${header}\n\n${body}\n${footer}`;
     if (estimateTokens(text) > budget) {
       const room = Math.max(0, budget * 4 - header.length - footer.length - 8);
-      text = `${header}\n\n${body.slice(0, room)}…\n${footer}`;
+      // Trim from the oldest end when the conversation sits last, so the newest turn survives.
+      text = conversationBudget ? `${header}\n\n…${body.slice(body.length - room)}\n${footer}` : `${header}\n\n${body.slice(0, room)}…\n${footer}`;
     }
     pack = { text, tokens: estimateTokens(text), budget, injected, knownSeq, headSeq, hash: shortHash(text) };
   }
