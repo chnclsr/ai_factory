@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
-import { configuredModels } from './memory/router-harness.mjs';
+import { configuredModels } from './memory/testing/router-harness.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
 const router = path.join(root, 'router.mjs');

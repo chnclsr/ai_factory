@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { makeHarness, memoryBlock, ROOT } from './router-harness.mjs';
+import { makeHarness, memoryBlock, ROOT } from './testing/router-harness.mjs';
 import { parseTranscript, lastExchange, cleanRequest, isRouterCall } from './agy.mjs';
 import { snapshotProject } from './store.mjs';
 import { readTurns } from './session.mjs';

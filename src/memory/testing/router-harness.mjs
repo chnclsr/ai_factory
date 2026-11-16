@@ -9,9 +9,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
-import { tempDir } from './test-helpers.mjs';
+import { tempDir } from './helpers.mjs';
 
-export const ROOT = path.resolve(import.meta.dirname, '..', '..');
+export const ROOT = path.resolve(import.meta.dirname, '..', '..', '..');
 export const ROUTER = path.join(ROOT, 'router.mjs');
 
 // Model ids as the fake CLIs see them, read from router_config.json so tests follow the chain

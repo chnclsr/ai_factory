@@ -11,7 +11,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { ROOT } from '../router-harness.mjs';
+import { ROOT } from '../testing/router-harness.mjs';
 import { prepareScenario, runRouter } from './runner.mjs';
 import { snapshotProject } from '../store.mjs';
 import { readTurns, listSessions, findSession } from '../session.mjs';

@@ -96,10 +96,10 @@ function measureFsFloor(dir, rounds = 200) {
   return { p50Ms: +percentile(samples, 0.5).toFixed(2), p95Ms: +percentile(samples, 0.95).toFixed(2) };
 }
 
-// recall@5 on the canary eval set (src/memory/eval-fixture.mjs) with 2000 distractors.
+// recall@5 on the canary eval set (src/memory/testing/eval-fixture.mjs) with 2000 distractors.
 // FTS alone and FTS fused with vectors (step 8) answer the same queries from separate index files.
 async function evalRecall(dir) {
-  const { writeEvalProject, recallAt } = await import('../src/memory/eval-fixture.mjs');
+  const { writeEvalProject, recallAt } = await import('../src/memory/testing/eval-fixture.mjs');
   const { search } = await import('../src/memory/search.mjs');
   const { vectorSettings } = await import('../src/memory/vector.mjs');
   const repo = path.join(dir, 'eval.git');

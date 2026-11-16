@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { makeHarness, memoryBlock, ROUTER } from './router-harness.mjs';
+import { makeHarness, memoryBlock, ROUTER } from './testing/router-harness.mjs';
 import { createMemory } from './index.mjs';
 import { extractJson, validateState, renderState, readState } from './state.mjs';
 import { snapshotProject } from './store.mjs';

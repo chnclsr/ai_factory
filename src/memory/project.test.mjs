@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { resolveProject, normalizeRemote, parseMarker, slugify, isValidProjectKey } from './project.mjs';
-import { tempDir as makeTemp } from './test-helpers.mjs';
+import { tempDir as makeTemp } from './testing/helpers.mjs';
 
 const tempDir = t => makeTemp(t, 'mem proj ');
 

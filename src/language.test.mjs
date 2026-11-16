@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { makeHarness, memoryBlock } from './memory/router-harness.mjs';
+import { makeHarness, memoryBlock } from './memory/testing/router-harness.mjs';
 
 const ROOT_CONFIG = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'router_config.json'), 'utf8'));
 const CLAUDE = ['--engine', 'claude', '--model', 'haiku-5.5', '--no-fallback'];

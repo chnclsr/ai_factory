@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { makeHarness, FAKE_SESSION_IDS } from './router-harness.mjs';
+import { makeHarness, FAKE_SESSION_IDS } from './testing/router-harness.mjs';
 import { snapshotProject } from './store.mjs';
 import { listSessions, readMeta, readTurns } from './session.mjs';
 import { resolveProject, UNSCOPED_PROJECT } from './project.mjs';

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { tempDir } from '../test-helpers.mjs';
+import { tempDir } from '../testing/helpers.mjs';
 import { runSuite, summarise, compareToBaseline, scorePrompt } from './runner.mjs';
 import { scenarios } from './scenarios.mjs';
 

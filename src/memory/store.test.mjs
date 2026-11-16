@@ -8,7 +8,7 @@ import { readCommit, readRef, writeBlob, writeTree, hashObject, compareAndSwapRe
 import { commitProject, snapshotProject, writePage, uuidv7, parseFrontMatter } from './store.mjs';
 import { projectRef } from './project.mjs';
 import { sanitizeText } from './sanitize.mjs';
-import { tempDir, fsck } from './test-helpers.mjs';
+import { tempDir, fsck } from './testing/helpers.mjs';
 
 const here = import.meta.dirname;
 

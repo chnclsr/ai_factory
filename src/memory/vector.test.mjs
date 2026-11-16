@@ -1,14 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { tempDir } from './test-helpers.mjs';
+import { tempDir } from './testing/helpers.mjs';
 import { commitProject, writePage } from './store.mjs';
 import { openIndex, closeIndex, syncRef, stmt } from './fts.mjs';
 import { embed, dot, chunkText, spliceChunks, vectorSettings, attachVectors, vectorSearch, annRecall } from './vector.mjs';
 import { search } from './search.mjs';
 import { buildPack } from './pack.mjs';
 import { projectRef } from './project.mjs';
-import { writeEvalProject, recallAt } from './eval-fixture.mjs';
+import { writeEvalProject, recallAt } from './testing/eval-fixture.mjs';
 
 function setup(t) {
   const dir = tempDir(t, 'mem-vec-');

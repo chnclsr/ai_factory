@@ -3,13 +3,13 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire, syncBuiltinESMExports } from 'node:module';
-import { tempDir } from './test-helpers.mjs';
+import { tempDir } from './testing/helpers.mjs';
 import { commitProject, writePage } from './store.mjs';
 import { openIndex, closeIndex, syncRef, indexStats, ftsQuery, stmt } from './fts.mjs';
 import { searchWithInfo, search, terms } from './search.mjs';
 import { buildPack } from './pack.mjs';
 import { projectRef } from './project.mjs';
-import { writeEvalProject, recallAt } from './eval-fixture.mjs';
+import { writeEvalProject, recallAt } from './testing/eval-fixture.mjs';
 
 const childProcess = createRequire(import.meta.url)('node:child_process');
 

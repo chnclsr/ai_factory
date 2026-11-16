@@ -9,10 +9,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { createHarness, memoryBlock, ROUTER, configuredModels } from '../router-harness.mjs';
+import { createHarness, memoryBlock, ROUTER, configuredModels } from '../testing/router-harness.mjs';
 import { resolveProbeActions } from './scenarios.mjs';
 import { createMemory } from '../index.mjs';
-import { initFixtureRepo, commitAll } from '../test-helpers.mjs';
+import { initFixtureRepo, commitAll } from '../testing/helpers.mjs';
 import { estimateTokens } from '../pack.mjs';
 import { validateState, writeState } from '../state.mjs';
 

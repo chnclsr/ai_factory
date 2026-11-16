@@ -8,7 +8,7 @@
 //   inflected  Turkish queries whose words carry different suffixes than the stored text, and
 //              English queries with a typo; plain term matching misses most of them
 
-import { commitProject } from './store.mjs';
+import { commitProject } from '../store.mjs';
 
 const ENTITIES = ['pelican', 'zephyr', 'quartz', 'falcon', 'mistral', 'juniper', 'obsidian', 'tundra', 'saffron', 'cobalt',
   'harbor', 'lantern', 'meridian', 'nimbus', 'orchid', 'prism', 'raven', 'sequoia', 'thistle', 'umber'];
