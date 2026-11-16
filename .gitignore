@@ -1,17 +1,28 @@
+# Dependencies
 node_modules/
+
+# Local state and runtime data (memory store, caches, eval reports)
+.runtime/
+.backups/
+*_registry.json
+*_registry.json.tmp.*
+.*_prompt_*.txt
+
+# Secrets
 .env
 .env.*
 !.env.example
 *_token.txt
-*_registry.json
-*_registry.json.tmp.*
-.*_prompt_*.txt
+
+# Logs, temporary files and editor leftovers
 *.log
-.runtime/
-.backups/
-coverage/
-agy-puter-watchdog/
 *.tmp
 *.bak
+coverage/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
 
-# Temporary files and editor leftovers
+# A separate project that lives next to this one on the author's machine
+agy-puter-watchdog/

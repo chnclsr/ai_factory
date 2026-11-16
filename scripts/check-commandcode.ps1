@@ -1,3 +1,4 @@
+# Command Code usage and quota report.
 $ErrorActionPreference = 'Stop'
-& node (Join-Path $PSScriptRoot 'scripts\check-commandcode-usage.mjs') @args
+& node (Join-Path $PSScriptRoot 'check-commandcode-usage.mjs') @args
 exit $LASTEXITCODE

@@ -2,18 +2,28 @@
   "name": "ai-factory",
   "version": "1.0.0",
   "private": true,
-  "description": "Local AI task router, quota tracker and Gemini/Antigravity hooks",
+  "description": "Local multi-engine AI task router with git-backed memory, quota tracking and Antigravity hooks",
   "type": "module",
   "engines": {
     "node": ">=22.13"
   },
   "scripts": {
     "setup": "node scripts/setup.mjs",
+    "check": "node scripts/check.mjs",
     "route": "node router.mjs",
     "quota": "node quota_tracker.mjs",
     "deploy": "node deploy_skill.mjs",
     "test": "node --test",
-    "check": "node scripts/check.mjs",
+    "eval": "node scripts/memory-eval.mjs",
+    "bench": "node scripts/bench-memory.mjs",
     "build:extension": "node scripts/build-extension.mjs"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chnclsr/ai_factory.git"
+  },
+  "bin": {
+    "ai-factory": "router.mjs"
   }
 }
