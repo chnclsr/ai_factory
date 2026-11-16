@@ -84,7 +84,7 @@ function onPath(program) {
 }
 if (onPath('git')) ok('git is installed (memory records each call\'s file changes with it)');
 else warn('git was not found: memory still records turns but not file changes');
-const wanted = { vibe: 'vibe', muse: 'muse', claude: 'claude', codex: 'codex', opencode: 'opencode' };
+const wanted = { vibe: 'vibe', muse: 'muse', claude: 'claude' };
 for (const [engine, program] of Object.entries(wanted)) {
   if (config && !config.engines?.[engine]) continue;
   const found = onPath(program);

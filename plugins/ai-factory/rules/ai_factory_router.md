@@ -13,15 +13,13 @@ Write the task so it stands on its own: when the user's message is a short follo
 Never delete a folder on your own. Deleting files is fine, including every file inside a folder when the folder itself remains (`<folder>/*`), but removing the folder needs the user's explicit approval first: ask, wait for their answer, and run it only after they agree, or let them run it themselves. This covers `rmdir`, `rd`, `rm -r`, `Remove-Item -Recurse`, `git clean -d`, `shutil.rmtree` and any other call that removes a directory. The PreToolUse hook denies these commands, so do not try to work around it.
 Delegate Claude tasks through this router. Do not launch `claude -p` or `claude --print` directly from a terminal tool, including through cmd.exe or PowerShell; the router owns that child invocation. Claude help, version, and authentication checks may run directly.
 
-With no model named, tasks run the free fallback chain from router_config.json: Vibe `vibe-glm-5.3-flash` → `vibe-glm-5.3` → Muse `muse-spark-1.3-contributor`. OpenCode and Codex are not in the chain; they run only when named. Each step runs only if the previous one fails.
-When the user names a model (e.g. deepseek, mimo, glm, nemotron, luna, terra, haiku, sonnet, opus 5.5), the router uses that model first. Pass it with --model <name> or leave the name in the task text.
+With no model named, tasks run the free fallback chain from router_config.json: Vibe `vibe-glm-5.3-flash` → `vibe-glm-5.3` → Muse `muse-spark-1.3-contributor`. Claude is not in the chain; it runs only when named. Each step runs only if the previous one fails.
+When the user names a model (e.g. glm, haiku, sonnet, opus 5.5), the router uses that model first. Pass it with --model <name> or leave the name in the task text.
 When the user asks another model to review code, call the router before reading or analyzing that code yourself. Pass the user's request, known file paths and working directory to the selected model; it can read the code.
 To run exactly the requested model and nothing else:
 {{ROUTER_COMMAND}} --model <requested-model> --no-fallback --task "<user request and known file paths>" --cwd "<working directory>"
-Codex accepts only the free-tier models `gpt-6-luna`, `gpt-5.6-luna`, `gpt-5.6-terra`; Sol, Astra and gpt-5.5 are not available on this account and are rejected.
 Honor an explicitly requested model version instead of the default. Do not substitute your own review for the requested model's result.
-Explicit OpenCode and Claude requests select their matching engines.
-Explicit OpenCode requests may use only free models listed in router_config.json.
+Explicit Claude requests select the Claude engine.
 Explicit Claude requests may use only configured Haiku 5.5/4.5, Sonnet 5.5/5, or Opus 5.5 models. When the user requests Opus 5.5, pass --engine claude --model opus-5.5. Otherwise use the configured Haiku default. Other Opus versions and Fable are excluded.
 
 For an explicit Opus 5.5 request, execute this command with the user's task:
@@ -36,7 +34,7 @@ $task = Get-Content -LiteralPath "<task-file>" -Raw
 ```
 
 Fallback order:
-- Any Vibe, OpenCode, Muse or Codex model -> remaining free chain steps -> Gemini
+- Any Vibe or Muse model -> remaining free chain steps -> Gemini
 - Claude -> Gemini (no fallback to other engines)
 Use --no-fallback to restrict execution to the selected model.
 Gemini is a handoff to the parent agent, not a new model API request.

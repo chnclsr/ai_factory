@@ -8,16 +8,14 @@ Use this skill only when the user's message starts with "[AI Factory]" (not "[AI
 When allowed, run {{ROUTER_COMMAND}} --task "<request>" --cwd "<working directory>".
 
 Options:
-- Default: free fallback chain Vibe `vibe-glm-5.3-flash` → `vibe-glm-5.3` → Muse `muse-spark-1.3-contributor`. OpenCode and Codex run only when named.
+- Default: free fallback chain Vibe `vibe-glm-5.3-flash` → `vibe-glm-5.3` → Muse `muse-spark-1.3-contributor`. Claude runs only when named.
 - --model <name>: use the named model first (engine is inferred); add --no-fallback to run only that model.
 - Do not claim tests were run unless the execution output confirms them.
 - --engine muse: contributor model.
-- --engine codex --model gpt-6-luna|gpt-5.6-luna|gpt-5.6-terra: free-tier Codex models only (no Sol/Astra).
-- --engine opencode --model <free-model>: OpenCode's configured free models; defaults to deepseek-v4.1-flash-free.
 - --engine claude --model haiku-5.5|haiku-4.5|sonnet-5|sonnet-5.5|opus-5.5: configured Claude Code models; defaults to Haiku 5.5. Select Opus 5.5 only when the user explicitly requests it.
 - --name <name>: save a named session.
 - --resume <name> --task "<follow-up>": resume when the engine provides a session ID.
-- --resume <name> --model <allowed-model> --task "<follow-up>": switch models in a saved OpenCode or Claude session.
+- --resume <name> --model <allowed-model> --task "<follow-up>": switch models in a saved Claude session.
 - --quota: refresh quota information.
 - --no-fallback: stop after the selected engine fails.
 

@@ -8,7 +8,7 @@ corrected, the layout was not regenerated); this document is the complete descri
 ## Overview
 
 ```
-Antigravity ──hooks──▶ router (src/router.mjs) ──▶ engine CLI (vibe | muse | claude | codex | opencode)
+Antigravity ──hooks──▶ router (src/router.mjs) ──▶ engine CLI (vibe | muse | claude)
    ▲  SessionStart            │  ▲                         │
    │  PreInvocation           │  └── memory block ◀── memory store (.runtime/memory.git)
    └─ Stop (records turns) ───┴─────────── records each turn ──┘
@@ -29,14 +29,12 @@ Antigravity ──hooks──▶ router (src/router.mjs) ──▶ engine CLI (v
 | Vibe | Default: chain step 1 (`vibe-glm-5.3-flash`) and step 2 (`vibe-glm-5.3`); also a Vibe model name or the keywords `vibe`, `mistral vibe`. Complexity keywords pick the configured `complex_model` | Remaining chain steps → Gemini handoff |
 | Muse | Chain step 3; a Muse model name or the keywords `muse`, `spark`, `meta`, `contributor`. Fixed contributor model | Remaining chain steps → Gemini handoff |
 | Claude | Only when named: `--engine claude`, a Claude model name, or the keyword `claude`. Haiku by default, Opus 5.5 only when explicitly requested | Gemini handoff |
-| Codex | Only when named (`codex`, `gpt`, `openai` keywords or a Codex model); free tier only (luna, terra) | Remaining chain steps → Gemini handoff |
-| OpenCode | Only when named (`--engine opencode` or one of its model names); free allowlisted models only | Remaining chain steps → Gemini handoff |
 
 An explicit `--engine` or `--model` wins; then a model name found in the task text; then Gemini and engine keywords; otherwise
-`fallback_chain` from `router_config.json`. The default chain is Vibe Flash → Vibe GLM 5.3 → Muse. OpenCode and Codex were removed from it and run
-only when named. OpenCode health is tracked per model, so one rate-limited model does not quarantine the rest. OpenCode and Claude model
-aliases resolve through `router_config.json`, then pass an allowlist and cost check before execution. The router invokes their local CLIs
-with JSON output, captures the response text and session ID, and records a named session only when the provider returns an ID.
+`fallback_chain` from `router_config.json`. The default chain is Vibe Flash → Vibe GLM 5.3 → Muse. Claude model aliases resolve
+through `router_config.json`, then pass an allowlist and cost check before execution. The router invokes the engine CLIs with JSON output where
+they offer it, captures the response text and session ID, and records a named session only when the provider returns an ID. Vibe health is
+tracked per model, so one rate-limited model does not quarantine the other.
 
 The per-engine health gate checks cached quota and circuit-breaker state before launching an engine. A failed response is classified; only
 eligible failures follow the engine-specific fallback order. Gemini is a handoff to the parent Antigravity agent, not another API call by
