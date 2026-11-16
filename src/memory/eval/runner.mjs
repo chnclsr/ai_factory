@@ -132,7 +132,7 @@ function budgetOf(config, spec) {
 }
 
 // Builds the scenario's history in `h` and returns what the probe needs. Shared with the live layer.
-export async function prepareScenario(h, scenario) {
+export async function prepareScenario(h, scenario, { seedOnly = false } = {}) {
   const config = readConfig(h.configFile);
   const memory = createMemory({
     repoDir: h.repo, dataDir: h.dataDir, indexFile: path.join(h.dataDir, 'memory-index.sqlite'),
@@ -147,7 +147,8 @@ export async function prepareScenario(h, scenario) {
       if (r.status !== 0) throw new Error(`handoff begin failed: ${r.stderr}`);
       continue;
     }
-    if (turn.via === 'router') {
+    // The live layer seeds everything through the API: a `via: 'router'` turn would call a real engine.
+    if (turn.via === 'router' && !seedOnly) {
       const r = await runRouter(h, ['--session', sessionOf(turn), ...engineArgs(turn), '--no-fallback', '--cwd', cwd, '--task', turn.task],
         { actions: { response: turn.reply, writes: turn.writes } });
       if (r.status !== 0) throw new Error(`seed turn via router failed: ${r.stdout.slice(-400)} ${r.stderr.slice(-400)}`);

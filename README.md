@@ -263,7 +263,7 @@ node router.mjs memory search deploy --global
 
 `--scope repo` (default) searches the project; `dir` keeps only turns and notes recorded under that directory; `mine` reads only your personal notes, which never appear in project results. `--global` searches every project (still never your personal notes) and prefixes each hit with its project. Search and the related-items part of the block use a full-text index at `.runtime/memory-index.sqlite` (SQLite FTS5 through `node:sqlite`, Node 22.13 or newer). The index is derived from the git repository and kept in step on each read; deleting it only costs a rebuild, and if it cannot be opened the router falls back to scanning the repository. Secrets (`sk-…`, `ghp_…`, Telegram bot tokens, `Bearer` values, `.env` style `*_KEY=` assignments) are masked before anything is written. Design and status: [docs/memory-plan.md](docs/memory-plan.md).
 
-Before each attempt the engine's task file starts with a `<retrieved-memory untrusted="true">` block, followed by your task unchanged. The block holds only what that engine conversation has not seen yet. A resumed conversation with nothing new gets no block at all. A new engine, or a fallback step, gets the session's earlier turns (task, start of the reply, changed files with `+/-` counts), the previous attempt's error, and up to five related notes or turns from other sessions. Tasks shorter than 20 characters ("emin misin", "devam et") get the session's own turns and any handoff but no keyword-matched notes, so a short follow-up still sees the conversation; with no session history they get no block. Nested router calls (`AI_FACTORY_ROUTER_DEPTH > 0`) never get one. Memory is never written to `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` or any other file a harness loads on its own.
+Before each attempt the engine's task file starts with a `<retrieved-memory untrusted="true">` block, followed by your task unchanged. The block holds only what that engine conversation has not seen yet. A resumed conversation with nothing new gets no block at all. A new engine, or a fallback step, gets the session's earlier turns (task, the recorded reply, changed files with `+/-` counts), the previous attempt's error, and up to five related notes or turns from other sessions. The conversation has its own budget (`conversation_tokens`): walking from the newest turn back, each turn may take half of what is left, so a long answer is never crowded out by a few short turns behind it. A reply that does not fit keeps its start and end around a `[… N characters skipped, full reply: turn n]` marker; the newest turn sits last, right before your task. When a turn was shortened or left out, the router adds one line of its own after the block with the command that prints the whole turn (`memory turn show <n>`), which the engine can run. Tasks shorter than 20 characters ("emin misin", "devam et") get the session's own turns and any handoff but no keyword-matched notes, so a short follow-up still sees the conversation; with no session history they get no block. Nested router calls (`AI_FACTORY_ROUTER_DEPTH > 0`) never get one. Memory is never written to `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` or any other file a harness loads on its own.
 
 | Key (`memory.*`) | Default | Purpose |
 |---|---|---|
@@ -273,8 +273,11 @@ Before each attempt the engine's task file starts with a `<retrieved-memory untr
 | `default_budget_tokens` | `1200` | Block size limit for a model without its own `memory_budget_tokens` |
 | `min_task_chars` | `20` | Shorter tasks skip the keyword search of related notes and turns |
 | `max_pages` | `5` | Most related notes/turns in one block |
-| `l0_tokens` / `l1_tokens` | `300` / `400` | Caps for the handoff/previous-error layer and the session-turns layer |
-| `recent_turns_verbatim` | `3` | Newest unseen turns shown with task and reply; older ones get one line |
+| `conversation_tokens` | `1600` | Budget for the session's own turns, on top of the model's memory budget. A model's `memory_conversation_tokens` overrides it (4000 for Claude and Codex). `0` restores the old fixed-width lines |
+| `l2_tokens` | `600` | With a conversation budget: cap for related notes and turns from other sessions |
+| `pull_hint` | `1` | Add the `memory turn show` hint when a turn was shortened; `0` turns it off. An engine's `memory_pull: 0` turns it off for that engine |
+| `l0_tokens` / `l1_tokens` | `300` / `400` | Caps for the handoff/previous-error layer and, with `conversation_tokens: 0`, the session-turns layer |
+| `recent_turns_verbatim` | `3` | With `conversation_tokens: 0`: newest unseen turns shown with task and reply; older ones get one line |
 | `index` | `true` | Use the SQLite full-text index for search and related items; `false` scans the git repository instead |
 | `vector.enabled` | `false` | Add local vectors to the index: finds notes whose words carry different Turkish suffixes or a typo, and quotes the matching part of a long note. See below |
 
@@ -309,7 +312,27 @@ node router.mjs memory handoff list --cwd <project>
 node router.mjs memory handoff accept <id> --cwd <project>
 ```
 
-Each model entry in `engines.*.models` also has `memory_budget_tokens`: 800 for the free Vibe, OpenCode and Muse models, 2000 for Codex and Claude. Tokens are estimated as characters divided by 4.
+Each model entry in `engines.*.models` also has `memory_budget_tokens`: 800 for the free Vibe, OpenCode and Muse models, 2000 for Codex and Claude. Tokens are estimated as characters divided by 4; Turkish runs closer to 3 characters per token, so real counts are about a third higher.
+
+The full recorded reply of any turn:
+
+```bash
+node router.mjs memory turn show <n> --session <sid> --cwd <project> [--max-bytes 20000]
+```
+
+#### Memory eval harness
+
+`scripts/memory-eval.mjs` measures what reaches the engine across whole conversations: follow-ups ("emin misin", "devam et", "why?"), recall within and across sessions and engines, decision updates, abstention, project isolation, standing rules, dead ends, handoffs, file changes, error recovery, long and hostile replies, and budget pressure (24 Turkish and English scenarios in `src/memory/eval/scenarios.mjs`). Plan and findings: [docs/memory-harness-plan.md](docs/memory-harness-plan.md).
+
+```bash
+node scripts/memory-eval.mjs                                   # layer 1: fake engines, no LLM, ~15 s
+node scripts/memory-eval.mjs --sweep conversation_tokens=0,800,1600,2400
+AI_FACTORY_LIVE=1 node scripts/memory-eval.mjs --live --engines vibe/vibe-glm-5.3-flash,muse,claude
+node scripts/memory-eval.mjs --export <project> <session> --name <file>   # then add probes to the file
+AI_FACTORY_LIVE=1 node scripts/memory-eval.mjs --live --replay
+```
+
+Layer 1 seeds each scenario's history, sends one request through the real router to a fake engine and scores the prompt that engine received; `node --test` fails when a scenario does worse than `src/memory/eval/baseline.json`. The live layer sends the same request to real engines and has a judge grade the answer: by default the cheapest fast model, `vibe/vibe-glm-5.3-flash`, called with memory off (`--judge engine/model` to change it). Replays are your own conversations exported to `.runtime/memory-eval/replays/`, which is never committed. Reports go to `.runtime/memory-eval/`.
 
 ### Live Quota Status Check
 ```bash

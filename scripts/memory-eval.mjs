@@ -6,6 +6,8 @@
 //   node scripts/memory-eval.mjs --save-baseline      store this run as src/memory/eval/baseline.json
 //   node scripts/memory-eval.mjs --set conversation_tokens=0   override memory settings for this run
 //   node scripts/memory-eval.mjs --json               print the report as JSON
+//   node scripts/memory-eval.mjs --sweep conversation_tokens=0,400,800,1600,2400
+//                                                     layer 1 once per value (threshold sweep)
 //   AI_FACTORY_LIVE=1 node scripts/memory-eval.mjs --live [--engines vibe,muse,claude] [--runs 1]
 //                                                     layer 2: real engines answer, a judge grades
 //   AI_FACTORY_LIVE=1 node scripts/memory-eval.mjs --live --replay
@@ -105,7 +107,33 @@ async function layerOne() {
   return report.comparison?.regressions.length ? 1 : 0;
 }
 
+// --sweep conversation_tokens=400,800,1600: layer 1 once per value, to find where coverage drops.
+// Sweeping conversation_tokens also removes per-model overrides so every engine gets the value.
+async function sweep(spec) {
+  const [key, list] = spec.split('=');
+  const values = String(list || '').split(',').map(Number).filter(Number.isFinite);
+  if (!key || !values.length) { console.error('Usage: --sweep <setting>=<v1>,<v2>,...'); return 1; }
+  const set = select(scenarios());
+  console.log(`${key.padStart(20)}  passed  coverage  gated  avg block tokens`);
+  for (const v of values) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-factory-sweep-'));
+    try {
+      const results = await runSuite(set, { dir, concurrency: 6, mutateConfig: cfg => {
+        cfg.memory = { ...cfg.memory, [key]: v };
+        if (key === 'conversation_tokens') for (const e of Object.values(cfg.engines)) for (const m of Object.values(e.models || {})) delete m.memory_conversation_tokens;
+      } });
+      const s = summarise(results);
+      const avg = Math.round(results.reduce((n, r) => n + (r.blockTokens || 0), 0) / Math.max(1, results.length));
+      console.log(`${String(v).padStart(20)}  ${`${s.passed}/${s.scenarios}`.padStart(6)}  ${String(s.coverage).padStart(8)}  ${String(s.gatedCoverage).padStart(5)}  ${String(avg).padStart(16)}`);
+    } finally {
+      try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5 }); } catch {}
+    }
+  }
+  return 0;
+}
+
 async function main() {
+  if (value('--sweep')) return sweep(value('--sweep'));
   if (flag('--export')) {
     const { exportSession } = await import('../src/memory/eval/live.mjs');
     const i = argv.indexOf('--export');
