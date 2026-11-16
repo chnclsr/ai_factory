@@ -78,8 +78,7 @@ actor/critic picker above the Antigravity prompt box and prefixes `[AI Factory]`
 
 ## Memory layer
 
-`src/memory/` is the cross-call memory described in [memory-plan.md](memory-plan.md) (design and deviations) and
-[memory-harness-plan.md](memory-harness-plan.md) (measurement and the follow-up work). It never imports the router or `lib/paths.mjs`; the router
+`src/memory/` is the cross-call memory. Its design and development plans are kept locally (git-ignored, `docs/*plan*.md`). It never imports the router or `lib/paths.mjs`; the router
 passes the repository path and the `memory` config section in, and calls it at three points: `resolveSession` before the attempts loop,
 `buildPrompt` for each attempt's task text, and `recordTurn` before the report. With `memory.enabled = false` the module is never loaded.
 

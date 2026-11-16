@@ -299,7 +299,7 @@ node scripts/memory-eval.mjs --export <project> <session> --name <file>   # repl
 The deterministic layer sends one request through the real router to a fake engine and scores the prompt it received; `npm test` fails when
 a scenario does worse than `src/memory/eval/baseline.json`. The live layer asks real engines and has a cheap judge model grade the answers
 (default `vibe/vibe-glm-5.3-flash`, called with memory off). Reports go to `.runtime/memory-eval/`. `npm run bench` measures the write and
-read paths. Design and results: [docs/memory-plan.md](docs/memory-plan.md), [docs/memory-harness-plan.md](docs/memory-harness-plan.md).
+read paths. The design and development plans are kept locally in `docs/` and are git-ignored.
 
 What the follow-up work changed, on the deterministic layer (share of the facts that reached the engine in the scenarios the effort is judged on):
 
@@ -397,8 +397,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, conventions and what a change 
 | Document | What it covers |
 |---|---|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Routing policy, report contract, Antigravity hooks, memory module map |
-| [docs/memory-plan.md](docs/memory-plan.md) | Memory design, storage format, security, test plan and every deviation |
-| [docs/memory-harness-plan.md](docs/memory-harness-plan.md) | The eval harness, the follow-up findings, what was built and measured |
 | [docs/diagrams/](docs/diagrams) | Interactive system and routing diagrams (open the HTML files locally) |
 | [browser-extension/README.md](browser-extension/README.md) | The actor / critic extension |
 
