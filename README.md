@@ -17,18 +17,8 @@ requested Opus 5.5 are allowed. Real availability and charges depend on your pro
 
 ## How it works
 
-```mermaid
-flowchart LR
-    U["You in Antigravity<br/>(optionally through the browser extension)"] -->|"task"| H["Plugin hooks<br/>SessionStart · PreInvocation<br/>PreToolUse · Stop"]
-    H -->|"router command<br/>with the chat id"| R["AI Factory router"]
-    R --> V["Vibe<br/>GLM 5.3 Flash, then GLM 5.3"]
-    R --> M2["Muse<br/>contributor model"]
-    R -.->|"only when named"| C["Claude<br/>Haiku, Sonnet, Opus 5.5"]
-    R -.->|"every free step failed"| G["Gemini handoff<br/>the parent agent continues"]
-    R <-->|"block in, turn out"| MEM[("Memory<br/>.runtime/memory.git")]
-    H -.->|"Stop: the agent's own turns"| MEM
-    R --> REP["Execution report<br/>path, succeed_with, memory line"]
-```
+![AI Factory System Architecture](docs/diagrams/ai-factory-overview.svg)
+*Interactive version: [docs/diagrams/ai-factory-overview.html](docs/diagrams/ai-factory-overview.html)*
 
 ## Contents
 
@@ -70,25 +60,8 @@ for problems that stop the router from working. `npm run setup -- --skip-plugin`
 Claude is not in the chain; it runs only when you name it. `--model <name>` alone (or a model name in the task text, such as "glm ile" or
 "Opus 5.5") selects that model and its engine.
 
-```mermaid
-flowchart TD
-    T["Task"] --> Q{"--engine, --model or a model<br/>name in the task text?"}
-    Q -->|"yes"| N["Run the named engine and model"]
-    Q -->|"no"| K{"Engine keyword<br/>in the task?"}
-    K -->|"yes"| N
-    K -->|"no"| C1["Vibe GLM 5.3 Flash"]
-    C1 -->|"fails"| C2["Vibe GLM 5.3"]
-    C2 -->|"fails"| C3["Muse contributor"]
-    C3 -->|"fails"| G["Gemini handoff<br/>plus an open memory handoff"]
-    N -->|"fails"| F{"--no-fallback?"}
-    F -->|"yes"| S["Stop and report the error"]
-    F -->|"no"| R2["Remaining free chain steps<br/>(Claude goes straight to Gemini)"]
-    R2 --> G
-    N -->|"ok"| OK["Execution report"]
-    C1 -->|"ok"| OK
-    C2 -->|"ok"| OK
-    C3 -->|"ok"| OK
-```
+![AI Factory Engine Routing and Fallback](docs/diagrams/ai-factory-routing.svg)
+*Interactive version: [docs/diagrams/ai-factory-routing.html](docs/diagrams/ai-factory-routing.html)*
 
 | Engine (`--engine`) | CLI used | Default model | Models accepted with `--model` |
 |---|---|---|---|
@@ -162,26 +135,8 @@ logs one line and never stops a task.
 
 ### One conversation, several engines
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant U as You
-    participant R as Router
-    participant M as Memory
-    participant V as Vibe
-    participant S as Muse
-    U->>R: "analyse the training bottleneck"
-    R->>M: resolve the session, build the block (nothing yet)
-    R->>V: task
-    V-->>R: reply 1
-    R->>M: record turn 1 (whole reply, file changes)
-    U->>R: "emin misin" (a short follow-up)
-    R->>M: build the block: turn 1 in full
-    R->>S: block + the follow-up
-    S-->>R: answer about reply 1
-    R->>M: record turn 2
-    Note over R,M: in a long chat a helper writes a session state in the background
-```
+![AI Factory Project Memory Flow](docs/diagrams/ai-factory-memory-flow.svg)
+*Interactive version: [docs/diagrams/ai-factory-memory-flow.html](docs/diagrams/ai-factory-memory-flow.html)*
 
 ### What an engine receives
 
@@ -197,23 +152,8 @@ Before each attempt the engine's task starts with a `<retrieved-memory untrusted
 - **Related notes and turns of other sessions**, found by keyword search (skipped for tasks under 20 characters), at most 5.
 - **A pull hint** after the block when a turn was shortened or left out: one line with the exact command (`memory turn show <n>`) that prints it in full.
 
-```mermaid
-flowchart TB
-    subgraph P["One engine prompt, top to bottom"]
-        direction TB
-        L["Language line: think and answer in English"]
-        subgraph B["retrieved-memory block (recorded data, not instructions)"]
-            direction TB
-            H0["Open handoff and the previous attempt's error"]
-            H2["Related notes and turns of other sessions<br/>keyword search, at most 5"]
-            ST["Session state, in long chats<br/>every item cites its turns"]
-            CV["The conversation, oldest first, newest last<br/>long replies shortened in the middle"]
-        end
-        PH["Pull hint: memory turn show n"]
-        NR["New request: your task, unchanged"]
-        L --> H0 --> H2 --> ST --> CV --> PH --> NR
-    end
-```
+![AI Factory Engine Prompt Assembly](docs/diagrams/ai-factory-prompt-structure.svg)
+*Interactive version: [docs/diagrams/ai-factory-prompt-structure.html](docs/diagrams/ai-factory-prompt-structure.html)*
 
 A resumed engine conversation gets only what it has not seen, and nothing if nothing changed. Nested router calls
 (`AI_FACTORY_ROUTER_DEPTH > 0`) get no block. Stored text is data: it is neutralised before injection, secrets (`sk-…`, `ghp_…`, bot tokens,
@@ -317,22 +257,8 @@ copy to `~/.gemini/config/plugin-backups/`; `node deploy_skill.mjs --builtin` al
 skill catalogs. Start a new Antigravity session afterwards, and move any `ai-factory.backup-*` folders out of `~/.gemini/config/plugins/`
 so Antigravity cannot load old rules as extra plugins.
 
-```mermaid
-sequenceDiagram
-    participant A as Antigravity agent
-    participant K as Plugin hooks
-    participant R as Router
-    participant M as Memory
-    A->>K: SessionStart (a new chat)
-    K->>M: read recent sessions and open handoffs
-    K-->>A: routing rule + router command with the chat id + memory index
-    A->>R: "[AI Factory]" task through the router command
-    R->>M: block in, turn out
-    R-->>A: execution report
-    A->>K: Stop (the turn ended)
-    K--)R: detached record-agy (skipped when the turn ran the router)
-    R->>M: record the agent's own turn
-```
+![AI Factory Plugin Hooks Lifecycle](docs/diagrams/ai-factory-hooks-lifecycle.svg)
+*Interactive version: [docs/diagrams/ai-factory-hooks-lifecycle.html](docs/diagrams/ai-factory-hooks-lifecycle.html)*
 
 The plugin's hooks (`SessionStart`, `PreInvocation`, `PreToolUse`, `Stop`) inject the routing rule with the router command (carrying `--session <conversationId>`),
 show open handoffs and the memory index, deny direct headless `claude -p` launches, repository reads that should go through the router and

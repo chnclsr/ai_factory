@@ -1,18 +1,13 @@
 # AI Factory architecture
 
-[System diagram HTML](diagrams/ai-factory-architecture.html) · [Routing flow HTML](diagrams/ai-factory-routing.html)
+[Overview Architecture](diagrams/ai-factory-overview.svg) ([interactive](diagrams/ai-factory-overview.html)) · [Routing Policy](diagrams/ai-factory-routing.svg) ([interactive](diagrams/ai-factory-routing.html)) · [Memory Continuity](diagrams/ai-factory-memory-flow.svg) ([interactive](diagrams/ai-factory-memory-flow.html)) · [Prompt Structure](diagrams/ai-factory-prompt-structure.svg) ([interactive](diagrams/ai-factory-prompt-structure.html)) · [Plugin Hooks](diagrams/ai-factory-hooks-lifecycle.svg) ([interactive](diagrams/ai-factory-hooks-lifecycle.html))
 
-The diagrams show the routing core. They do not yet draw the memory store or the Vibe engine as separate boxes (their labels were
-corrected, the layout was not regenerated); this document is the complete description.
+The system architecture diagrams are designed with the editorial `diagram-design` system (clean SVG vector assets with standalone interactive HTML versions).
 
 ## Overview
 
-```
-Antigravity ──hooks──▶ router (src/router.mjs) ──▶ engine CLI (vibe | muse | claude)
-   ▲  SessionStart            │  ▲                         │
-   │  PreInvocation           │  └── memory block ◀── memory store (.runtime/memory.git)
-   └─ Stop (records turns) ───┴─────────── records each turn ──┘
-```
+![AI Factory System Architecture](diagrams/ai-factory-overview.svg)
+*Interactive version: [diagrams/ai-factory-overview.html](diagrams/ai-factory-overview.html)*
 
 - The **plugin** (`plugins/ai-factory/`) gives Antigravity its routing rules and runs the hooks.
 - The **router** (`src/router.mjs`, started through `router.mjs`) picks an engine and model, applies model and health checks, runs the

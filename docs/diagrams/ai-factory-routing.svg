@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1000 540" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="routing-title routing-desc" id="ai-factory-routing-root">
+        <title id="routing-title">AI Factory · Engine Selection and Fallback Chain</title>
+        <desc id="routing-desc">Flowchart showing explicit engine selection vs default free fallback chain through Vibe, Muse, and Gemini handoff.</desc>
+        <defs>
+      <style>@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;family=Noto+Serif:ital@0;1&amp;family=Noto+Sans+KR:wght@400;500;600&amp;family=Noto+Serif+KR:wght@400&amp;family=Noto+Sans+TC:wght@400;500;600&amp;family=Noto+Serif+TC:wght@400&amp;display=swap');
+      #ai-factory-routing-root { --color-paper:   #f5f5f5;
+      --color-ink:     #2d3142;
+      --color-muted:   #4f5d75;
+      --color-accent:  #bf4520;
+      --font-sans:     'Geist', system-ui, sans-serif;
+      --font-serif:    'Instrument Serif', serif;
+      --font-mono:     'Geist Mono', ui-monospace, monospace; }
+      #ai-factory-routing-root { font-family: var(--font-sans); color: var(--color-ink); }
+      #ai-factory-routing-root .diagram-container { width: 100%; overflow-x: auto; }
+      @media print {
+#ai-factory-routing-root .diagram-container { overflow-x: visible; }
+}</style>
+          <pattern id="ai-factory-routing-dots" width="22" height="22" patternUnits="userSpaceOnUse">
+            <circle cx="1" cy="1" r="0.9" fill="#2d3142" fill-opacity="0.10"/>
+          </pattern>
+          <marker id="ai-factory-routing-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/>
+          </marker>
+          <marker id="ai-factory-routing-arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#bf4520"/>
+          </marker>
+          <marker id="ai-factory-routing-arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/>
+          </marker>
+        </defs>
+
+        <!-- Background -->
+        <rect width="100%" height="100%" fill="#f5f5f5"/>
+        <rect width="100%" height="100%" fill="url(#ai-factory-routing-dots)" opacity="0.55"/>
+
+        <!-- Grouping scope: Free Fallback Chain -->
+        <rect x="268" y="208" width="684" height="96" rx="8"
+              fill="#2d3142" stroke="#2d3142" stroke-width="0.8" stroke-dasharray="4,4" fill-opacity="0.02" stroke-opacity="0.12"/>
+        <rect x="284" y="202" width="136" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="352" y="211" fill="#2d3142" font-size="7" font-family="'Geist Mono', monospace"
+              text-anchor="middle" letter-spacing="0.14em" fill-opacity="0.45">FREE FALLBACK CHAIN</text>
+
+        <!-- Arrows first (behind boxes) -->
+        <!-- User Task -> Selection Check -->
+        <line x1="500" y1="88" x2="500" y2="124" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#ai-factory-routing-arrow)"/>
+
+        <!-- Selection Check -> Claude (Explicit) -->
+        <path d="M 420,152 H 160 Q 150,152 150,162 V 224"
+              fill="none" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#ai-factory-routing-arrow-link)"/>
+
+        <!-- Selection Check -> Vibe Flash (Default) -->
+        <path d="M 500,180 V 194 Q 500,202 492,202 H 375 Q 367,202 367,210 V 224"
+              fill="none" stroke="#bf4520" stroke-width="1.4" marker-end="url(#ai-factory-routing-arrow-accent)"/>
+
+        <!-- Vibe Flash -> Vibe GLM-5.3 (Fallback 1) -->
+        <line x1="464" y1="256" x2="504" y2="256" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#ai-factory-routing-arrow)"/>
+
+        <!-- Vibe GLM-5.3 -> Muse (Fallback 2) -->
+        <line x1="694" y1="256" x2="734" y2="256" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#ai-factory-routing-arrow)"/>
+
+        <!-- Claude -> Gemini Handoff (Fail) -->
+        <line x1="150" y1="288" x2="150" y2="368" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#ai-factory-routing-arrow)"/>
+
+        <!-- Muse -> Gemini Handoff (Final Fail) -->
+        <path d="M 834,288 V 460 Q 834,468 826,468 H 158 Q 150,468 150,460 V 432"
+              fill="none" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#ai-factory-routing-arrow)"/>
+
+        <!-- Claude -> Execution Report (Success) -->
+        <path d="M 210,288 V 320 Q 210,328 218,328 H 352 Q 360,328 360,336 V 368"
+              fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#ai-factory-routing-arrow)"/>
+
+        <!-- Vibe Flash -> Execution Report (Success) -->
+        <line x1="420" y1="288" x2="420" y2="368" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#ai-factory-routing-arrow)"/>
+
+        <!-- Vibe GLM-5.3 -> Execution Report (Success) -->
+        <line x1="600" y1="288" x2="600" y2="368" stroke="#bf4520" stroke-width="1.4" marker-end="url(#ai-factory-routing-arrow-accent)"/>
+
+        <!-- Muse -> Execution Report (Success) -->
+        <path d="M 770,288 V 320 Q 770,328 762,328 H 708 Q 700,328 700,336 V 368"
+              fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#ai-factory-routing-arrow)"/>
+
+        <!-- Arrow labels with masks -->
+        <rect x="236" y="146" width="56" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="264" y="155" fill="#2e5aa8" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">EXPLICIT</text>
+
+        <rect x="420" y="196" width="52" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="446" y="205" fill="#bf4520" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">DEFAULT</text>
+
+        <rect x="468" y="244" width="32" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="484" y="253" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">FAIL</text>
+
+        <rect x="698" y="244" width="32" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="714" y="253" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">FAIL</text>
+
+        <rect x="126" y="320" width="48" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="150" y="329" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">EXHAUST</text>
+
+        <rect x="472" y="462" width="76" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="510" y="471" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">ALL FAILED</text>
+
+        <!-- Nodes -->
+        <!-- Start Node: User Task -->
+        <rect x="420" y="32" width="160" height="56" rx="6" fill="#f5f5f5"/>
+        <rect x="420" y="32" width="160" height="56" rx="6" fill="#4f5d75" stroke="#5a6580" stroke-width="1" fill-opacity="0.08"/>
+        <rect x="428" y="40" width="30" height="12" rx="2" fill="none" stroke="#5a6580" stroke-width="0.8" stroke-opacity="0.40"/>
+        <text x="443" y="49" fill="#5a6580" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">INIT</text>
+        <text x="500" y="61" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">User Task</text>
+        <text x="500" y="76" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">--task / CLI argument</text>
+
+        <!-- Node 2: Route Check -->
+        <rect x="420" y="124" width="160" height="56" rx="6" fill="#f5f5f5"/>
+        <rect x="420" y="124" width="160" height="56" rx="6" fill="#2d3142" stroke="#2d3142" stroke-width="1" fill-opacity="0.03" stroke-opacity="0.30"/>
+        <rect x="428" y="132" width="36" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.22"/>
+        <text x="446" y="141" fill="#5a6580" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">CHECK</text>
+        <text x="500" y="153" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Engine Selection</text>
+        <text x="500" y="168" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">Named or Free Chain?</text>
+
+        <!-- Node 3: Claude Engine -->
+        <rect x="60" y="224" width="180" height="64" rx="6" fill="#f5f5f5"/>
+        <rect x="60" y="224" width="180" height="64" rx="6" fill="#ffffff" stroke="#2e5aa8" stroke-width="1"/>
+        <rect x="68" y="232" width="46" height="12" rx="2" fill="none" stroke="#2e5aa8" stroke-width="0.8" stroke-opacity="0.40"/>
+        <text x="91" y="241" fill="#2e5aa8" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">CLAUDE</text>
+        <text x="150" y="257" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Claude Engine</text>
+        <text x="150" y="274" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">Haiku / Sonnet / Opus</text>
+
+        <!-- Node 4: Vibe Flash -->
+        <rect x="284" y="224" width="180" height="64" rx="6" fill="#f5f5f5"/>
+        <rect x="284" y="224" width="180" height="64" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="292" y="232" width="38" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.40"/>
+        <text x="311" y="241" fill="#2d3142" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">STEP 1</text>
+        <text x="374" y="257" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">GLM 5.3 Flash</text>
+        <text x="374" y="274" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">Fast and Free · Vibe</text>
+
+        <!-- Node 5: Vibe GLM-5.3 -->
+        <rect x="504" y="224" width="190" height="64" rx="6" fill="#f5f5f5"/>
+        <rect x="504" y="224" width="190" height="64" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="512" y="232" width="38" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.40"/>
+        <text x="531" y="241" fill="#2d3142" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">STEP 2</text>
+        <text x="599" y="257" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Vibe GLM 5.3</text>
+        <text x="599" y="274" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">Reasoning · Complex</text>
+
+        <!-- Node 6: Muse Spark -->
+        <rect x="734" y="224" width="200" height="64" rx="6" fill="#f5f5f5"/>
+        <rect x="734" y="224" width="200" height="64" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="742" y="232" width="38" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.40"/>
+        <text x="761" y="241" fill="#2d3142" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">STEP 3</text>
+        <text x="834" y="257" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Muse Spark 1.3</text>
+        <text x="834" y="274" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">Meta Contributor · Free</text>
+
+        <!-- Node 7: Gemini Handoff -->
+        <rect x="60" y="368" width="180" height="64" rx="6" fill="#f5f5f5"/>
+        <rect x="60" y="368" width="180" height="64" rx="6" fill="#2d3142" stroke="#4f5d75" stroke-width="1" fill-opacity="0.05"/>
+        <rect x="68" y="376" width="46" height="12" rx="2" fill="none" stroke="#4f5d75" stroke-width="0.8" stroke-opacity="0.50"/>
+        <text x="91" y="385" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">HANDOFF</text>
+        <text x="150" y="401" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Gemini Handoff</text>
+        <text x="150" y="418" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">Parent AGY Agent</text>
+
+        <!-- Node 8: Done / Execution Report (Focal Coral) -->
+        <rect x="284" y="368" width="650" height="64" rx="6" fill="#f5f5f5"/>
+        <rect x="284" y="368" width="650" height="64" rx="6" fill="#bf4520" stroke="#bf4520" stroke-width="1.2" fill-opacity="0.08"/>
+        <rect x="292" y="376" width="38" height="12" rx="2" fill="none" stroke="#bf4520" stroke-width="0.8" stroke-opacity="0.50"/>
+        <text x="311" y="385" fill="#bf4520" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">REPORT</text>
+        <text x="922" y="418" fill="#bf4520" font-size="28" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="end" fill-opacity="0.12">OK</text>
+        <text x="609" y="401" fill="#2d3142" font-size="13" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">AI FACTORY EXECUTION REPORT</text>
+        <text x="609" y="418" fill="#4f5d75" font-size="8.5" font-family="'Geist Mono', monospace" text-anchor="middle">Path, succeed_with, cost, time and memory metrics returned to host</text>
+
+        <!-- Legend strip -->
+        <line x1="60" y1="500" x2="934" y2="500" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.10"/>
+        <text x="60" y="516" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEGEND</text>
+
+        <rect x="130" y="508" width="14" height="10" rx="2" fill="#ffffff" stroke="#2e5aa8" stroke-width="1"/>
+        <text x="150" y="516" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Explicit Claude engine</text>
+
+        <rect x="310" y="508" width="14" height="10" rx="2" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <text x="330" y="516" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Free fallback chain</text>
+
+        <rect x="480" y="508" width="14" height="10" rx="2" fill="#bf4520" stroke="#bf4520" stroke-width="1" fill-opacity="0.08"/>
+        <text x="500" y="516" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Execution report (success)</text>
+
+        <line x1="680" y1="513" x2="704" y2="513" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#ai-factory-routing-arrow)"/>
+        <text x="712" y="516" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif">Fallback step / Handoff</text>
+      </svg>

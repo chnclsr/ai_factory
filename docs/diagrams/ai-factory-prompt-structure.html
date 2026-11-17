@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Factory · Prompt Assembly Stack</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #f5f5f5;
+      --color-ink:     #2d3142;
+      --color-muted:   #4f5d75;
+      --color-accent:  #bf4520;
+      --font-sans:     'Geist', system-ui, sans-serif;
+      --font-serif:    'Instrument Serif', serif;
+      --font-mono:     'Geist Mono', ui-monospace, monospace;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+    }
+
+    .frame { max-width: 1200px; width: 100%; min-width: 0; }
+    .diagram-container { width: 100%; overflow-x: auto; }
+
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.5rem;
+    }
+
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      color: var(--color-ink);
+      margin-bottom: 1.5rem;
+    }
+
+    svg { width: 100%; min-width: 960px; display: block; }
+    @media print {
+      .diagram-container { overflow-x: visible; }
+      svg { min-width: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Layer Stack · Diagram Design</p>
+    <h1>AI Factory · Prompt Assembly Structure</h1>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1000 480" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="prompt-title prompt-desc">
+        <title id="prompt-title">AI Factory · Prompt Assembly Structure</title>
+        <desc id="prompt-desc">Layer stack diagram showing the top-to-bottom prompt layout assembled by the router for target engine execution.</desc>
+        <defs>
+          <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+            <circle cx="1" cy="1" r="0.9" fill="rgba(45,49,66,0.10)"/>
+          </pattern>
+        </defs>
+
+        <!-- Background -->
+        <rect width="100%" height="100%" fill="#f5f5f5"/>
+        <rect width="100%" height="100%" fill="url(#dots)" opacity="0.55"/>
+
+        <!-- Left Direction Guide Column -->
+        <text x="56" y="68" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" letter-spacing="0.18em">TOP PREAMBLE</text>
+        <line x1="84" y1="80" x2="84" y2="400" stroke="rgba(45,49,66,0.30)" stroke-width="1"/>
+        <polygon points="80,396 88,396 84,404" fill="#4f5d75"/>
+        <text x="56" y="420" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" letter-spacing="0.18em">TASK PAYLOAD</text>
+
+        <!-- Stack Container Boundaries -->
+        <line x1="120" y1="80" x2="940" y2="80" stroke="rgba(45,49,66,0.12)" stroke-width="1"/>
+        <line x1="120" y1="400" x2="940" y2="400" stroke="rgba(45,49,66,0.12)" stroke-width="1"/>
+
+        <!-- Layer 1: System Prompt (Top layer, crisp white) -->
+        <rect x="120" y="80" width="820" height="64" fill="#ffffff"/>
+        <line x1="120" y1="144" x2="940" y2="144" stroke="rgba(45,49,66,0.12)" stroke-width="1"/>
+        <text x="144" y="116" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em">L1</text>
+        <text x="220" y="118" fill="#2d3142" font-size="15" font-weight="600" font-family="'Geist', sans-serif">1. System Prompt</text>
+        <text x="916" y="118" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end" letter-spacing="0.06em">persona, tools, style guidelines</text>
+
+        <!-- Layer 2: Project Context -->
+        <rect x="120" y="144" width="820" height="64" fill="#f8f8f8"/>
+        <line x1="120" y1="208" x2="940" y2="208" stroke="rgba(45,49,66,0.12)" stroke-width="1"/>
+        <text x="144" y="180" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em">L2</text>
+        <text x="220" y="182" fill="#2d3142" font-size="15" font-weight="600" font-family="'Geist', sans-serif">2. Project Context</text>
+        <text x="916" y="182" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end" letter-spacing="0.06em">GEMINI.md, AGENTS.md, git status, cwd</text>
+
+        <!-- Layer 3: Skills Context -->
+        <rect x="120" y="208" width="820" height="64" fill="#f0f0f0"/>
+        <line x1="120" y1="272" x2="940" y2="272" stroke="rgba(45,49,66,0.12)" stroke-width="1"/>
+        <text x="144" y="244" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em">L3</text>
+        <text x="220" y="246" fill="#2d3142" font-size="15" font-weight="600" font-family="'Geist', sans-serif">3. Active Skills</text>
+        <text x="916" y="246" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end" letter-spacing="0.06em">selected SKILL.md, workflow instructions</text>
+
+        <!-- Layer 4: Session Memory (Focal Coral) -->
+        <rect x="120" y="272" width="820" height="64" fill="rgba(191,69,32,0.08)"/>
+        <rect x="120" y="272" width="820" height="64" fill="none" stroke="#bf4520" stroke-width="1"/>
+        <text x="144" y="308" fill="#bf4520" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em" font-weight="600">L4</text>
+        <text x="220" y="310" fill="#2d3142" font-size="15" font-weight="600" font-family="'Geist', sans-serif">4. Project Memory</text>
+        <text x="916" y="310" fill="#bf4520" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end" letter-spacing="0.06em" font-weight="500">session history + retrieved SQLite turns</text>
+
+        <!-- Layer 5: User Request -->
+        <rect x="120" y="336" width="820" height="64" fill="#ffffff"/>
+        <text x="144" y="372" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em">L5</text>
+        <text x="220" y="374" fill="#2d3142" font-size="15" font-weight="600" font-family="'Geist', sans-serif">5. User Request</text>
+        <text x="916" y="374" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end" letter-spacing="0.06em">original user task, CLI parameters, stdin</text>
+
+        <!-- Legend and Editorial Caption -->
+        <line x1="120" y1="436" x2="940" y2="436" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+        <text x="120" y="456" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" letter-spacing="0.18em">FOCAL LAYER</text>
+        <text x="220" y="456" fill="#4f5d75" font-size="8.5" font-family="'Geist', sans-serif" font-style="italic">Project memory (L4) bridges conversation turns across engine fallbacks without repeating raw context.</text>
+      </svg>
+    </div>
+  </div>
+</body>
+</html>

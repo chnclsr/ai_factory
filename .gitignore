@@ -18,6 +18,8 @@ node_modules/
 *.log
 *.tmp
 *.bak
+__pycache__/
+*.pyc
 coverage/
 .vscode/
 .idea/
