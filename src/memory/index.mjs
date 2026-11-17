@@ -91,7 +91,9 @@ export function createMemory({ repoDir, dataDir, indexFile = null, memoryConfig 
         sid = found;
         const meta = readMeta(snapshot, sid) || {};
         const engine = opts.engine || meta.last_engine;
-        const savedId = meta.engine_sessions?.[engine] || null;
+        // An interrupted turn's engine session wins over the last clean one: that is the conversation
+        // the user wants to continue.
+        const savedId = meta.interrupted_sessions?.[engine] || meta.engine_sessions?.[engine] || null;
         resume = {
           engine, model: meta.models?.[engine] || undefined, sessionId: savedId, cwd: meta.cwd || undefined,
           // A different engine than last time starts a new engine conversation on purpose: the

@@ -1,7 +1,10 @@
 // Sessions and turns inside a project's chain.
 //
 //   sessions/<sid>.jsonl                  one line per router call (append-only)
-//   sessions/<sid>.meta.json              alias, cwd, engine_sessions, last_injected_seq, turn count
+//   sessions/<sid>.meta.json              alias, cwd, engine_sessions, last_injected_seq, turn count,
+//                                         status (active|interrupted) and restore (engine, model,
+//                                         engine session and time of the latest turn, so a session
+//                                         can be tracked and resumed without replaying turns)
 //   sessions/<sid>/turns/<n>.response.md  full response, up to 256 KB
 //   sessions/<sid>/turns/<n>.patch        the turn's own diff, up to 512 KB
 //   session-aliases.json                  alias -> sid for this project
@@ -69,6 +72,31 @@ export function listSessions(snapshot) {
   return snapshot.list('sessions').filter(e => e.name.endsWith('.meta.json'))
     .map(e => parseJson(snapshot.read(`sessions/${e.name}`), null)).filter(Boolean)
     .sort((a, b) => String(b.updated || '').localeCompare(String(a.updated || '')));
+}
+
+// What a --resume of `sid` would bring back: the engine, model and engine session of the latest
+// turn plus whether the session ended active or interrupted. Older metadata without a restore
+// block falls back to the flat fields it always had.
+export function resumeTarget(snapshot, sid) {
+  const meta = readMeta(snapshot, sid);
+  if (!meta) return null;
+  const restore = meta.restore || {};
+  const engine = restore.engine || meta.last_engine || null;
+  const interruptedSession = (engine && meta.interrupted_sessions?.[engine]) || null;
+  const engineSession = interruptedSession || restore.engine_session || (engine && meta.engine_sessions?.[engine]) || null;
+  const status = restore.status || meta.status || null;
+  return {
+    sid,
+    engine,
+    model: restore.model || null,
+    engine_session: engineSession,
+    interrupted_session: interruptedSession,
+    interrupted_engine: restore.interrupted?.engine || null,
+    status,
+    interrupted: status === 'interrupted',
+    at: restore.at || meta.updated || null,
+    turns: meta.turns || 0
+  };
 }
 
 // Pulls the model's reply out of an engine's captured output tail. JSON engines emit one event per
@@ -162,16 +190,51 @@ export function recordTurnCommit(repoDir, ctx, outcome, extra = {}) {
     meta.updated = line.ts;
     meta.cwd = ctx.cwd;
     if (ctx.alias) meta.alias = ctx.alias;
-    meta.last_engine = outcome.engine;
     meta.models = meta.models || {};
     meta.engine_sessions = meta.engine_sessions || {};
     meta.last_injected_seq = meta.last_injected_seq || {};
-    if (outcome.engine && outcome.model) meta.models[outcome.engine] = outcome.model;
-    if (engineSession) {
-      meta.engine_sessions[outcome.engine] = engineSession;
-      // The engine session saw this turn itself, so everything up to this seq is known to it.
-      meta.last_injected_seq[engineSessionKey(outcome.engine, engineSession)] = view.seq;
+
+    // A failed or interrupted turn (watchdog kill, timeout) keeps its own engine session id apart from
+    // the last working one, so --resume can pick the interrupted conversation back up. A later
+    // successful turn of the same engine supersedes it.
+    meta.interrupted_sessions = meta.interrupted_sessions || {};
+    if (!outcome.ok && outcome.engine && engineSession) meta.interrupted_sessions[outcome.engine] = engineSession;
+    else if (outcome.ok && outcome.engine) delete meta.interrupted_sessions[outcome.engine];
+
+    if (outcome.ok && outcome.engine) {
+      meta.last_engine = outcome.engine;
+      if (outcome.model) meta.models[outcome.engine] = outcome.model;
+      if (engineSession) {
+        meta.engine_sessions[outcome.engine] = engineSession;
+        // The engine session saw this turn itself, so everything up to this seq is known to it.
+        meta.last_injected_seq[engineSessionKey(outcome.engine, engineSession)] = view.seq;
+      }
+    } else if (!meta.last_engine && outcome.engine) {
+      meta.last_engine = outcome.engine;
+      if (outcome.model) meta.models[outcome.engine] = outcome.model;
     }
+
+    // Restore metadata: the latest turn's engine/model/session and whether the session is live or
+    // ended mid-work (a failed turn). A failed turn keeps the last engine session that worked, so
+    // a resume lands where the conversation was still usable.
+    const ok = Boolean(outcome.ok);
+    const restoreEngine = ok ? outcome.engine : (meta.last_engine || outcome.engine || null);
+    const restoreModel = ok
+      ? (outcome.model || null)
+      : (restoreEngine && meta.models ? meta.models[restoreEngine] : outcome.model) || null;
+    const restoreSession = ok
+      ? (engineSession || (outcome.engine && meta.engine_sessions ? meta.engine_sessions[outcome.engine] : null) || null)
+      : (restoreEngine && meta.engine_sessions ? meta.engine_sessions[restoreEngine] : null) || null;
+
+    meta.status = ok ? 'active' : 'interrupted';
+    meta.restore = {
+      engine: restoreEngine,
+      model: restoreModel,
+      engine_session: restoreSession,
+      status: meta.status,
+      at: line.ts,
+      ...(!ok && outcome.engine && engineSession ? { interrupted: { engine: outcome.engine, engine_session: engineSession } } : {})
+    };
     view.write(paths.meta, JSON.stringify(meta, null, 2));
     if (ctx.alias) {
       const aliases = parseJson(view.read(ALIASES_FILE), {});
