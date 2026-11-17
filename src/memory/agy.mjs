@@ -40,9 +40,9 @@ const callText = call => JSON.stringify(call?.args || {});
 export function isRouterCall(call) {
   if (!call || !/command/i.test(call.name || '')) return false;
   const text = callText(call);
-  // The hook's command carries `--session <id>` before the subcommand, so a memory read looks like
-  // `router.mjs" --session 5b48… memory search …`; that is still a read, not a delegation.
-  return /router\.mjs/i.test(text) && !/router\.mjs\\?"?\s+(?:--session\s+\S+\s+)?memory\b/i.test(text);
+  // A router call is any shell command that runs router.mjs or ai-factory for a task;
+  // memory subcommands (`ai-factory memory ...`) are reads, not delegations.
+  return (/(?:router\.mjs|\bai-factory\b)/i.test(text)) && !/(?:router\.mjs\\?"?|\bai-factory\b)\s+(?:--session\s+\S+\s+)?memory\b/i.test(text);
 }
 
 // The last finished exchange: the last user request, the agent's final answer after it (a model

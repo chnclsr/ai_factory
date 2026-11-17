@@ -36,10 +36,14 @@ test('transcript parsing: request without wrapper, final answer, routed turns de
   assert.deepEqual([last.step, last.request, last.answer, last.routed], [10, 'second question', 'answer two (OWL-9)', false]);
 
   assert.equal(isRouterCall({ name: 'run_command', args: { CommandLine: '& "node.exe" "C:/x/router.mjs" --session s --task "do it"' } }), true);
+  assert.equal(isRouterCall({ name: 'run_command', args: { CommandLine: 'ai-factory --session s --task "do it"' } }), true);
   assert.equal(isRouterCall({ name: 'run_command', args: { CommandLine: 'node "C:/x/router.mjs" memory search billing --cwd .' } }), false);
+  assert.equal(isRouterCall({ name: 'run_command', args: { CommandLine: 'ai-factory memory search billing --cwd .' } }), false);
   // The command the hook hands the agent has --session in front (seen in a real Antigravity run).
   assert.equal(isRouterCall({ name: 'run_command', args: { CommandLine: '& "C:/Program Files/nodejs/node.exe" "C:/x/router.mjs" --session 5b48be91-a5ee-4c71-8e75-10cc17f045de memory search antiuav --cwd "c:\\p"' } }), false);
+  assert.equal(isRouterCall({ name: 'run_command', args: { CommandLine: 'ai-factory --session 5b48be91-a5ee-4c71-8e75-10cc17f045de memory search antiuav --cwd "c:\\p"' } }), false);
   assert.equal(isRouterCall({ name: 'run_command', args: { CommandLine: '& "node.exe" "C:/x/router.mjs" --session 5b48be91-a5ee --engine muse --task "x"' } }), true);
+  assert.equal(isRouterCall({ name: 'run_command', args: { CommandLine: 'ai-factory --session 5b48be91-a5ee --engine muse --task "x"' } }), true);
   const routed = parseTranscript(transcript([
     step(0, 'USER_INPUT', { content: '<USER_REQUEST>[AI Factory] do it</USER_REQUEST>' }),
     step(1, 'PLANNER_RESPONSE', { tool_calls: [{ name: 'run_command', args: { CommandLine: 'node router.mjs --task "do it"' } }] }),

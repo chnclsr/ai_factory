@@ -160,7 +160,7 @@ process.stdin.on('end', async () => {
     const installation = fs.existsSync(installFile)
       ? JSON.parse(fs.readFileSync(installFile, 'utf8'))
       : { node: process.execPath, router: path.resolve(__dirname, '../../..', 'router.mjs') };
-    const baseCommand = (process.platform === 'win32' ? '& ' : '') + JSON.stringify(installation.node) + ' ' + JSON.stringify(installation.router);
+    const baseCommand = installation.command || 'ai-factory';
     const conversation = payloadSession(payload);
     // The agent copies this command into its router calls, so --session rides along.
     const command = conversation ? baseCommand + ' --session ' + conversation : baseCommand;

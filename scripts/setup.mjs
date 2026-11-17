@@ -19,12 +19,17 @@ try {
     const npmCli = path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
     if (fs.existsSync(npmCli)) {
       runNode([npmCli, 'ci', '--ignore-scripts', '--no-audit', '--no-fund']);
+      runNode([npmCli, 'link']);
     } else {
-      const result = spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['ci', '--ignore-scripts', '--no-audit', '--no-fund'], {
-        cwd: ROOT, stdio: 'inherit', shell: process.platform === 'win32', windowsHide: true
-      });
-      if (result.error) throw result.error;
-      if (result.status !== 0) throw new Error('npm ci failed');
+      const runNpm = (cmdArgs) => {
+        const result = spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', cmdArgs, {
+          cwd: ROOT, stdio: 'inherit', shell: process.platform === 'win32', windowsHide: true
+        });
+        if (result.error) throw result.error;
+        if (result.status !== 0) throw new Error(`npm ${cmdArgs[0]} failed`);
+      };
+      runNpm(['ci', '--ignore-scripts', '--no-audit', '--no-fund']);
+      runNpm(['link']);
     }
   }
   runNode(['scripts/check.mjs']);
@@ -34,7 +39,7 @@ try {
     console.log('Plugin installed: ' + result.target);
     if (result.backup) console.log('Previous plugin backup: ' + result.backup);
   }
-  console.log('Setup complete. Route tasks with: node router.mjs --task "<request>"');
+  console.log('Setup complete. Route tasks with: ai-factory --task "<request>"');
   console.log('Restart Gemini/Antigravity to load hooks. Target: ' + PLUGIN_TARGET);
 } catch (error) {
   console.error('[Setup] ' + error.message);
