@@ -18,7 +18,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { spawn, execSync } from 'child_process';
 import crypto from 'crypto';
-import { fetchAllQuotas, formatQuotaTable, checkEngineQuotaGate } from './quota_tracker.mjs';
+import { fetchAllQuotas, formatQuotaTable, formatQuotaChip, checkEngineQuotaGate } from './quota_tracker.mjs';
 import { ROOT, CONFIG_FILE, DATA_DIR, MEMORY_REPO, MEMORY_INDEX, stateFile } from '../lib/paths.mjs';
 import { decideWatchdogAction, sampleTreeCpuMs } from './watchdog.mjs';
 import { createLineCapture } from './stream-capture.mjs';
@@ -862,7 +862,8 @@ async function main() {
   if (options.quota) {
     console.log('[AI Factory] Model ve motor kota kullan\u0131m oranlar\u0131 sorgulan\u0131yor...');
     const quotaData = await fetchAllQuotas({ force: true });
-    console.log('\n' + formatQuotaTable(quotaData) + '\n');
+    console.log('\n' + formatQuotaChip(quotaData) + '\n');
+    console.log(formatQuotaTable(quotaData) + '\n');
     process.exit(0);
   }
 

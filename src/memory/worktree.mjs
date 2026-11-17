@@ -1,4 +1,5 @@
 // Before/after snapshots of the user's project, so a turn records only the changes made during it.
+// Also hosts the isolated-worktree helpers used to run agents in parallel on one repository.
 //
 // In a git repository the snapshot is a tree written through a temporary GIT_INDEX_FILE seeded
 // from the real index: `git add -A` then `git write-tree`. The user's index and working tree are
@@ -73,7 +74,12 @@ export function snapshotFs(root, { ignorePaths = [], deadline }) {
     for (const item of items) {
       const childRel = rel ? `${rel}/${item.name}` : item.name;
       if (matchesIgnore(childRel, ignorePaths)) continue;
-      if (item.isDirectory()) { if (!SKIP_DIRS.has(item.name)) stack.push(childRel); continue; }
+      if (item.isDirectory()) {
+        if (SKIP_DIRS.has(item.name)) continue;
+        if (childRel === '.ai-factory/worktrees' || childRel.startsWith('.ai-factory/worktrees/')) continue;
+        stack.push(childRel);
+        continue;
+      }
       if (!item.isFile()) continue;
       if (++count > MAX_FS_FILES) return { kind: 'fs', root, files, truncated: true };
       try {
@@ -181,4 +187,222 @@ export function revertPatch(root, patch, { check = false } = {}) {
   } finally {
     try { fs.unlinkSync(file); } catch {}
   }
+}
+
+// ── Isolated worktrees ──────────────────────────────────────────────────────────────────────────
+//
+// Real `git worktree` isolation so several agents can work the same repository in parallel: each
+// agent checks out its own linked worktree under <repo>/.ai-factory/worktrees/<name> on its own
+// branch, and no one can overwrite another's files. The directory is ignored through the local
+// .git/info/exclude (no tracked file is touched), so snapshots keep ignoring it too.
+
+const WORKTREE_ROOT = '.ai-factory/worktrees';
+const WORKTREE_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+const WORKTREE_BUDGET_MS = 30000;
+const WORKTREE_BRANCH_PREFIX = 'ai-factory/';
+
+function worktreeDeadline() {
+  return Date.now() + WORKTREE_BUDGET_MS;
+}
+
+// Accepts a repo handle ({ worktree, gitDir, commonDir } from findGitRepo) or a plain directory.
+export function resolveWorktreeRepo(repo) {
+  const handle = typeof repo === 'string' ? findGitRepo(repo) : repo;
+  if (!handle || !handle.worktree) throw new Error('no git repository found');
+  return handle;
+}
+
+export function isValidWorktreeName(name) {
+  return typeof name === 'string' && WORKTREE_NAME_RE.test(name);
+}
+
+export function isValidGitRef(ref) {
+  if (typeof ref !== 'string' || !ref.trim()) return false;
+  const trimmed = ref.trim();
+  if (trimmed.startsWith('-') || trimmed.startsWith('/') || trimmed.endsWith('/') || trimmed.endsWith('.')) return false;
+  if (trimmed.includes('..') || trimmed.includes('@{') || trimmed.includes('\\')) return false;
+  if (/[\x00-\x1F\x7F :?*[]/.test(trimmed)) return false;
+  if (trimmed.endsWith('.lock')) return false;
+  return true;
+}
+
+export function samePath(a, b) {
+  if (!a || !b) return false;
+  const pa = path.resolve(a);
+  const pb = path.resolve(b);
+  return process.platform === 'win32'
+    ? pa.toLowerCase() === pb.toLowerCase()
+    : pa === pb;
+}
+
+export function pathStartsWith(target, parent) {
+  if (!target || !parent) return false;
+  const pt = path.resolve(target);
+  const pp = path.resolve(parent);
+  if (process.platform === 'win32') {
+    const lt = pt.toLowerCase();
+    const lp = pp.toLowerCase();
+    return lt === lp || lt.startsWith(lp.endsWith(path.sep) ? lp : lp + path.sep);
+  }
+  return pt === pp || pt.startsWith(pp.endsWith(path.sep) ? pp : pp + path.sep);
+}
+
+export function worktreeRoot(repo) {
+  const handle = resolveWorktreeRepo(repo);
+  const mainWorktree = (handle.commonDir && !samePath(handle.gitDir, handle.commonDir))
+    ? path.dirname(handle.commonDir)
+    : handle.worktree;
+  return path.join(mainWorktree, WORKTREE_ROOT);
+}
+
+export function worktreePath(repo, name) {
+  if (!isValidWorktreeName(name)) throw new Error(`invalid worktree name: ${name}`);
+  return path.join(worktreeRoot(repo), name);
+}
+
+function branchName(name) {
+  return `${WORKTREE_BRANCH_PREFIX}${name}`;
+}
+
+// Keeps the internal worktree area out of the parent's status and snapshots. Local exclude only:
+// .gitignore is a tracked file and its content belongs to the project, not to this tooling.
+function ensureExcluded(repo) {
+  const handle = resolveWorktreeRepo(repo);
+  const excludeFile = path.join(handle.commonDir || handle.gitDir, 'info', 'exclude');
+  fs.mkdirSync(path.dirname(excludeFile), { recursive: true });
+  let current = '';
+  try { current = fs.readFileSync(excludeFile, 'utf8'); } catch {}
+  const lines = new Set(current.split(/\r?\n/).map(l => l.trim()));
+  const rule = `/${WORKTREE_ROOT}/`;
+  if (!lines.has(rule)) {
+    const addition = `# ai-factory isolated worktrees\n${rule}\n`;
+    fs.appendFileSync(excludeFile, (current && !current.endsWith('\n') ? '\n' : '') + addition);
+  }
+}
+
+// Parses `git worktree list --porcelain`: records separated by blank lines, one `key value` each.
+export function parseWorktreeList(text) {
+  const out = [];
+  let current = null;
+  for (const line of String(text || '').split('\n')) {
+    if (!line.trim()) { if (current) out.push(current); current = null; continue; }
+    const key = line.slice(0, line.indexOf(' ') === -1 ? line.length : line.indexOf(' '));
+    const value = line.slice(key.length).replace(/^ /, '');
+    if (key === 'worktree') { if (current) out.push(current); current = { path: value, head: '', branch: '', bare: false, detached: false, locked: '', prunable: '' }; }
+    else if (!current) continue;
+    else if (key === 'HEAD') current.head = value;
+    else if (key === 'branch') current.branch = value.replace(/^refs\/heads\//, '');
+    else if (key === 'bare') current.bare = true;
+    else if (key === 'detached') current.detached = true;
+    else if (key === 'locked') current.locked = value;
+    else if (key === 'prunable') current.prunable = value;
+  }
+  if (current) out.push(current);
+  return out;
+}
+
+export function listWorktrees(repo) {
+  const handle = resolveWorktreeRepo(repo);
+  return parseWorktreeList(runGit(handle.worktree, ['worktree', 'list', '--porcelain'], { deadline: worktreeDeadline() }).toString('utf8'));
+}
+
+// Creates (or reopens) one isolated worktree. A fresh run gets its own branch ai-factory/<name>
+// cut from `base`; if that branch already exists the existing checked-out state is reused, and a
+// stale directory whose worktree was deregistered is replaced by a clean `worktree prune`.
+export function createWorktree(repo, { name, base = 'HEAD', branch } = {}) {
+  const handle = resolveWorktreeRepo(repo);
+  if (!isValidWorktreeName(name)) {
+    throw new Error(`invalid worktree name: ${name}`);
+  }
+  if (!isValidGitRef(base)) {
+    throw new Error(`invalid base git ref: ${base}`);
+  }
+  if (branch && !isValidGitRef(branch)) {
+    throw new Error(`invalid branch git ref: ${branch}`);
+  }
+
+  const dir = worktreePath(handle, name);
+  const existing = listWorktrees(handle).find(w => samePath(w.path, dir));
+  if (existing) {
+    return { ...existing, reused: true, path: dir };
+  }
+
+  ensureExcluded(handle);
+  fs.mkdirSync(path.dirname(dir), { recursive: true });
+
+  const branchRef = branch || branchName(name);
+
+  let branchExists = false;
+  try {
+    runGit(handle.worktree, ['show-ref', '--verify', '--quiet', `refs/heads/${branchRef}`], { deadline: worktreeDeadline() });
+    branchExists = true;
+  } catch {}
+
+  if (branchExists) {
+    const checkedOut = listWorktrees(handle).find(w => w.branch === branchRef);
+    if (checkedOut) {
+      throw new Error(`branch '${branchRef}' is already checked out at '${checkedOut.path}'`);
+    }
+    try {
+      runGit(handle.worktree, ['worktree', 'add', '--', dir, branchRef], { deadline: worktreeDeadline() });
+      return { path: dir, branch: branchRef, base, created: true, reusedBranch: true };
+    } catch (err) {
+      throw new Error(`git worktree add failed attaching branch '${branchRef}': ${String(err.message || err).slice(0, 300)}`);
+    }
+  }
+
+  try {
+    runGit(handle.worktree, ['worktree', 'add', '-b', branchRef, '--', dir, base], { deadline: worktreeDeadline() });
+    return { path: dir, branch: branchRef, base, created: true };
+  } catch (err) {
+    if (fs.existsSync(dir)) {
+      try {
+        runGit(handle.worktree, ['worktree', 'prune'], { deadline: worktreeDeadline() });
+        runGit(handle.worktree, ['worktree', 'add', '-b', branchRef, '--', dir, base], { deadline: worktreeDeadline() });
+        return { path: dir, branch: branchRef, base, created: true };
+      } catch (retry) {
+        throw new Error(`git worktree add failed: ${String(retry.message || retry).slice(0, 300)}`);
+      }
+    }
+    throw new Error(`git worktree add failed: ${String(err.message || err).slice(0, 300)}`);
+  }
+}
+
+// Removes one worktree we created (refuses the main worktree and anything outside our area).
+export function removeWorktree(repo, name, { force = false, deleteBranch = true } = {}) {
+  const handle = resolveWorktreeRepo(repo);
+  if (!isValidWorktreeName(name)) return { ok: false, reason: `invalid worktree name: ${name}` };
+  const dir = path.resolve(worktreePath(handle, name));
+  const listed = listWorktrees(handle).find(w => samePath(w.path, dir));
+  if (!listed) return { ok: false, reason: `no worktree at ${dir}` };
+  if (listed.bare) return { ok: false, reason: 'refusing to remove a bare worktree' };
+  if (samePath(dir, handle.worktree)) return { ok: false, reason: 'refusing to remove the main worktree' };
+  const internal = path.resolve(worktreeRoot(handle));
+  if (!pathStartsWith(dir, internal)) return { ok: false, reason: 'worktree is outside the ai-factory area' };
+
+  try {
+    runGit(handle.worktree, ['worktree', 'remove', ...(force ? ['--force'] : []), '--', dir], { deadline: worktreeDeadline() });
+  } catch (err) {
+    if (!force) return { ok: false, reason: String(err.message || err).slice(0, 300), hint: 'the worktree may have uncommitted changes; pass force to remove it anyway' };
+    return { ok: false, reason: String(err.message || err).slice(0, 300) };
+  }
+
+  let branchDeleted = false;
+  if (deleteBranch && listed.branch && listed.branch.startsWith(WORKTREE_BRANCH_PREFIX)) {
+    try {
+      runGit(handle.worktree, ['branch', force ? '-D' : '-d', '--', listed.branch], { deadline: worktreeDeadline() });
+      branchDeleted = true;
+    } catch {
+      branchDeleted = false;
+    }
+  }
+
+  return { ok: true, path: dir, branch: listed.branch, branchDeleted };
+}
+
+// Drops administrative records for worktrees whose directories are already gone.
+export function pruneWorktrees(repo) {
+  const handle = resolveWorktreeRepo(repo);
+  runGit(handle.worktree, ['worktree', 'prune'], { deadline: worktreeDeadline() });
+  return { ok: true };
 }

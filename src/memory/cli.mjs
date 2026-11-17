@@ -13,6 +13,13 @@
 //   memory handoff begin --to <engine|any> [--task <text>] [--session <s>]
 //   memory handoff list [--all]
 //   memory handoff accept <hid>                 take an open handoff (exactly one taker wins)
+//   memory handoff approve|reject <hid> [--note <text>]
+//   memory handoff complete <hid>
+//   memory handoff summary [--run <run_id>]
+//   memory worktree list [--cwd <dir>]          real git worktrees in this repository
+//   memory worktree create <name> [--base <ref>] [--branch <ref>]
+//   memory worktree remove <name> [--force] [--keep-branch]
+//   memory worktree prune                       prune stale worktree metadata
 //   memory note add <text> [--scope repo|mine]  store a note page (mine = personal ref)
 //   memory project list                         projects with their head Seq, sessions and aliases
 //   memory project rename <old> <new> [--yes]   the old key keeps resolving to the new one
@@ -27,8 +34,8 @@ import { snapshotProject, commitProject, writePage } from './store.mjs';
 import { findSession, listSessions, readTurns, readMeta, sessionPaths, ALIASES_FILE } from './session.mjs';
 import { searchWithInfo, SCOPES } from './search.mjs';
 import { vectorSettings } from './vector.mjs';
-import { beginHandoff, claimHandoff, listHandoffs, isValidHandoffId } from './handoff.mjs';
-import { revertPatch } from './worktree.mjs';
+import { beginHandoff, claimHandoff, completeHandoff, approveHandoff, listHandoffs, runSummary, isValidHandoffId, isValidRunId } from './handoff.mjs';
+import { revertPatch, listWorktrees, createWorktree, removeWorktree, pruneWorktrees } from './worktree.mjs';
 import { followMoves, describeProjects, renameProject, mergeProjects } from './projects.mjs';
 import { sanitizeValue, neutralizeForInjection } from './sanitize.mjs';
 import { readState, renderState, updateState } from './state.mjs';
@@ -221,9 +228,21 @@ export async function runMemoryCli(argv, { repoDir, indexFile = null, configFile
       const lastTurn = sid ? readTurns(snapshot, sid).filter(t => t.kind === 'turn').at(-1) : null;
       const task = flags.task || lastTurn?.task || '';
       if (!task) { io.err('Nothing to hand off: pass --task or run a session first.\n'); return 1; }
-      const hid = beginHandoff(repoDir, project.key, { to, fromSession: sid || '', fromEngine: 'user', reason: flags.reason || 'manual handoff', task });
-      io.out(`handoff: ${hid}\n`);
-      return 0;
+      const parentRun = flags.run || flags['parent-run'] || '';
+      const taskId = flags['task-id'] || flags.taskid || '';
+      const dependsOn = flags['depends-on'] || flags.dependson || '';
+      const approval = flags.gate || flags.approval || '';
+      try {
+        const hid = beginHandoff(repoDir, project.key, {
+          to, fromSession: sid || '', fromEngine: 'user', reason: flags.reason || 'manual handoff', task,
+          parentRun, taskId, dependsOn, approval
+        });
+        io.out(`handoff: ${hid}\n`);
+        return 0;
+      } catch (err) {
+        io.err(`Handoff begin failed: ${err?.message || err}\n`);
+        return 1;
+      }
     }
     if (action === 'list') {
       const all = listHandoffs(snapshot).filter(h => flags.all !== undefined || h.state === 'open');
@@ -234,9 +253,100 @@ export async function runMemoryCli(argv, { repoDir, indexFile = null, configFile
     if (action === 'accept') {
       if (!isValidHandoffId(arg)) { io.err('Usage: memory handoff accept <handoff id>\n'); return 1; }
       const claim = claimHandoff(repoDir, project.key, arg, flags.by || 'user');
-      if (!claim.ok) { io.err(`Handoff ${arg} was not taken: it is ${claim.state}.\n`); return 3; }
+      if (!claim.ok) {
+        const reasons = claim.reasons ? ` (${claim.reasons.join(', ')})` : '';
+        io.err(`Handoff ${arg} was not taken: it is ${claim.state}${reasons}.\n`);
+        return 3;
+      }
       const handoff = listHandoffs(snapshotProject(repoDir, project.key)).find(h => h.id === arg);
       io.out(`Accepted ${arg}.\n${handoff?.task || ''}\n`);
+      return 0;
+    }
+    if (action === 'approve' || action === 'reject') {
+      if (!isValidHandoffId(arg)) { io.err(`Usage: memory handoff ${action} <handoff id> [--note <text>] [--by <who>]\n`); return 1; }
+      const status = action === 'approve' ? 'approved' : 'rejected';
+      const res = approveHandoff(repoDir, project.key, arg, { by: flags.by || 'user', status, note: flags.note || '' });
+      if (!res.ok) { io.err(`Handoff ${arg} could not be ${status}: ${res.reason}.\n`); return 3; }
+      io.out(`${action === 'approve' ? 'Approved' : 'Rejected'} handoff ${arg}.\n`);
+      return 0;
+    }
+    if (action === 'complete') {
+      if (!isValidHandoffId(arg)) { io.err('Usage: memory handoff complete <handoff id> [--by <who>]\n'); return 1; }
+      const res = completeHandoff(repoDir, project.key, arg, { by: flags.by || 'user' });
+      if (!res.ok) { io.err(`Handoff ${arg} could not be completed: it is ${res.state}.\n`); return 3; }
+      io.out(`Completed handoff ${arg}.\n`);
+      return 0;
+    }
+    if (action === 'summary') {
+      if (flags.run) {
+        if (!isValidRunId(flags.run)) { io.err(`Invalid run id: ${flags.run}\n`); return 1; }
+        const summary = runSummary(snapshot, flags.run);
+        io.out(`Run ${summary.run}: open=${summary.counts.open}, accepted=${summary.counts.accepted}, completed=${summary.counts.completed}, expired=${summary.counts.expired}\n`);
+        io.out(`Ready (${summary.ready.length}): ${summary.ready.map(h => h.id).join(', ') || 'none'}\n`);
+        io.out(`Blocked (${summary.blocked.length}): ${summary.blocked.map(h => h.id).join(', ') || 'none'}\n`);
+        for (const h of summary.subtasks) {
+          io.out(`  ${h.id} [${h.state}${h.approval ? `/${h.approval}` : ''}]: ${h.task_id || '-'} ${h.task.slice(0, 60)}\n`);
+        }
+        return 0;
+      }
+      const all = listHandoffs(snapshot);
+      const counts = { open: 0, accepted: 0, completed: 0, expired: 0 };
+      const runs = new Set();
+      for (const h of all) {
+        counts[h.state] = (counts[h.state] || 0) + 1;
+        if (h.parent_run) runs.add(h.parent_run);
+      }
+      io.out(`Total handoffs: ${all.length} (open: ${counts.open}, accepted: ${counts.accepted}, completed: ${counts.completed}, expired: ${counts.expired})\n`);
+      if (runs.size) io.out(`Runs: ${[...runs].join(', ')}\n`);
+      return 0;
+    }
+  }
+
+  if (group === 'worktree') {
+    const repo = findGitRepo(workdir);
+    if (!repo) { io.err(`No git repository at ${workdir}.\n`); return 1; }
+
+    if (action === 'list') {
+      const trees = listWorktrees(repo);
+      for (const w of trees) {
+        const details = [
+          w.branch ? `[${w.branch}]` : w.detached ? '[detached]' : '',
+          w.head ? w.head.slice(0, 8) : '',
+          w.bare ? '(bare)' : '',
+          w.locked ? `(locked: ${w.locked})` : '',
+          w.prunable ? `(prunable: ${w.prunable})` : ''
+        ].filter(Boolean).join(' ');
+        io.out(`${w.path} ${details}\n`);
+      }
+      if (!trees.length) io.out('(no worktrees)\n');
+      return 0;
+    }
+    if (action === 'create') {
+      const name = arg;
+      if (!name) { io.err('Usage: memory worktree create <name> [--base <ref>] [--branch <ref>] [--cwd <dir>]\n'); return 1; }
+      try {
+        const res = createWorktree(repo, { name, base: flags.base || 'HEAD', branch: flags.branch });
+        io.out(`Worktree created at ${res.path} on branch ${res.branch}${res.reused ? ' (reused)' : ''}\n`);
+        return 0;
+      } catch (err) {
+        io.err(`Worktree creation failed: ${err.message}\n`);
+        return 1;
+      }
+    }
+    if (action === 'remove') {
+      const name = arg;
+      if (!name) { io.err('Usage: memory worktree remove <name> [--force] [--keep-branch] [--cwd <dir>]\n'); return 1; }
+      const res = removeWorktree(repo, name, { force: Boolean(flags.force), deleteBranch: !flags['keep-branch'] });
+      if (!res.ok) {
+        io.err(`Worktree removal failed: ${res.reason}${res.hint ? ' (' + res.hint + ')' : ''}\n`);
+        return 1;
+      }
+      io.out(`Removed worktree at ${res.path}${res.branchDeleted ? ` (branch ${res.branch} deleted)` : ''}\n`);
+      return 0;
+    }
+    if (action === 'prune') {
+      pruneWorktrees(repo);
+      io.out('Pruned stale worktrees.\n');
       return 0;
     }
   }
@@ -305,6 +415,7 @@ export async function runMemoryCli(argv, { repoDir, indexFile = null, configFile
   io.err('Usage: node router.mjs memory session show [<alias|sid>] | session adopt <alias> | turn show <n> | turn diff <n> | turn revert <n> [--yes]\n' +
     '       | note add <text> [--scope repo|mine] | search <query> [--scope repo|dir|mine] [--global]\n' +
     '       | project list | project rename <old> <new> [--yes] | project merge <source> <target> [--yes]\n' +
-    '       | handoff begin --to <engine|any> [--task <text>] | handoff list [--all] | handoff accept <hid>\n');
+    '       | handoff begin --to <engine|any> [--task <text>] | handoff list [--all] | handoff accept <hid> | handoff approve|reject|complete <hid> | handoff summary [--run <id>]\n' +
+    '       | worktree list | worktree create <name> | worktree remove <name> [--force] | worktree prune\n');
   return 1;
 }

@@ -277,7 +277,7 @@ export async function fetchAllQuotas({ force = false, timeoutMs = 25000 } = {}) 
 }
 
 // Quota Gate Kontrol\u00fc (Router pre-flight denetimi)
-export function checkEngineQuotaGate(engine, quotaRegistry = null) {
+export function checkEngineQuotaGate(engine, quotaRegistry = null, now = Date.now()) {
   let reg = quotaRegistry;
   if (!reg && fs.existsSync(QUOTA_FILE)) {
     try {
@@ -285,7 +285,7 @@ export function checkEngineQuotaGate(engine, quotaRegistry = null) {
     } catch (e) {}
   }
   if (!reg?.engines) return { allowed: true };
-  if (reg.updatedAt && Date.now() - Date.parse(reg.updatedAt) >= (reg.ttlMs || DEFAULT_TTL_MS)) return { allowed: true };
+  if (reg.updatedAt && now - Date.parse(reg.updatedAt) >= (reg.ttlMs || DEFAULT_TTL_MS)) return { allowed: true };
 
   const eng = engine.toLowerCase();
   if (eng === 'codex') {
@@ -375,15 +375,121 @@ export function formatQuotaTable(data) {
   return lines.join('\n');
 }
 
+// ── Compact quota chip ──────────────────────────────────────────────────────────────────────────
+//
+// One terminal line summarising quota state for the router output. A percentage used at or above
+// QUOTA_WARNING_USED_PERCENT gets a trailing "!" and any engine the gate would block is marked
+// BLOCKED, so a warning survives even where the caller prints plain text.
+
+export const QUOTA_WARNING_USED_PERCENT = 80;
+
+// Short human form of the time until an ISO timestamp: "2h 5m", "45m", "30s", "now".
+export function formatTimeLeft(iso, now = Date.now()) {
+  const ts = Date.parse(iso);
+  if (!Number.isFinite(ts)) return null;
+  let seconds = Math.round((ts - now) / 1000);
+  if (seconds <= 0) return 'now';
+  const parts = [];
+  for (const [label, size] of [['h', 3600], ['m', 60], ['s', 1]]) {
+    const value = Math.floor(seconds / size);
+    if (value > 0) { parts.push(`${value}${label}`); seconds -= value * size; }
+    if (parts.length === 2) break;
+  }
+  return parts.length ? parts.join(' ') : 'now';
+}
+
+// Short human form of the time since an ISO timestamp: "1d 2h ago", "2h 5m ago", "45m ago", "just now".
+export function formatTimeAgo(iso, now = Date.now()) {
+  const ts = Date.parse(iso);
+  if (!Number.isFinite(ts)) return null;
+  let seconds = Math.max(0, Math.round((now - ts) / 1000));
+  if (seconds < 15) return 'just now';
+  const parts = [];
+  for (const [label, size] of [['d', 86400], ['h', 3600], ['m', 60], ['s', 1]]) {
+    const value = Math.floor(seconds / size);
+    if (value > 0) { parts.push(`${value}${label}`); seconds -= value * size; }
+    if (parts.length === 2) break;
+  }
+  return parts.length ? `${parts.join(' ')} ago` : 'just now';
+}
+
+// BLOCKED comes from the same gate the router uses before it picks an engine, so the chip never
+// disagrees with what the router will do (including the TTL staleness rule).
+function chipCodex(c, now, registry) {
+  if (!c || c.status !== 'ok') return 'codex ERR';
+  if (c.usedPercent == null) return 'codex ?';
+  const used = Math.round(c.usedPercent);
+  const left = Math.max(0, 100 - used);
+  const warn = used >= QUOTA_WARNING_USED_PERCENT ? '!' : '';
+  const timeLeft = c.resetsAt ? formatTimeLeft(c.resetsAt, now) : null;
+  const reset = timeLeft ? ` reset ${timeLeft}` : '';
+  const blocked = checkEngineQuotaGate('codex', registry, now).allowed === false;
+  return `codex ${left}% left${warn}${reset}${blocked ? ' BLOCKED' : ''}`;
+}
+
+function chipAntigravity(a, now) {
+  if (!a || a.status !== 'ok' || !a.quotas?.length) return 'agy ERR';
+  const row = (group, window) => a.quotas.find(q => q.modelGroup?.includes(group) && q.window?.includes(window));
+  const pick = (group, window) => {
+    const r = row(group, window);
+    return r && Number.isFinite(r.remainingPercent) ? Math.round(r.remainingPercent) : null;
+  };
+  const pct = v => v == null ? '?' : `${v}%`;
+  const worst = [pick('Gemini', 'Five Hour'), pick('Gemini', 'Weekly'), pick('Claude', 'Five Hour'), pick('Claude', 'Weekly')]
+    .filter(v => v != null);
+  const warn = worst.some(v => v < 100 - QUOTA_WARNING_USED_PERCENT) ? '!' : '';
+  // Reset countdown of the window that is closest to running out; rows without a parseable resetsAt are skipped.
+  const timed = a.quotas
+    .filter(q => Number.isFinite(q.remainingPercent) && q.resetsAt && formatTimeLeft(q.resetsAt, now))
+    .sort((x, y) => x.remainingPercent - y.remainingPercent)[0];
+  const reset = timed ? ` reset ${formatTimeLeft(timed.resetsAt, now)}` : '';
+  return `agy gem ${pct(pick('Gemini', 'Five Hour'))}/${pct(pick('Gemini', 'Weekly'))} claude ${pct(pick('Claude', 'Five Hour'))}/${pct(pick('Claude', 'Weekly'))}${warn}${reset}`;
+}
+
+function chipMuse(m) {
+  if (!m || m.status !== 'ok') return 'muse ERR';
+  const used = m.usage?.percentUsed;
+  if (Number.isFinite(used)) {
+    const pct = Math.round(used);
+    return `muse ${pct}% used${pct >= QUOTA_WARNING_USED_PERCENT ? '!' : ''}`;
+  }
+  return 'muse ok';
+}
+
+function chipAge(registry, now) {
+  const ts = Date.parse(registry?.updatedAt || '');
+  if (!Number.isFinite(ts)) return '';
+  const ago = formatTimeAgo(registry.updatedAt, now);
+  return ago ? `updated ${ago}` : '';
+}
+
+// The compact chip, e.g.
+//   [codex 17% left! reset 2h 5m | agy gem 45%/72% claude 30%/65% | muse ok | updated 1m ago]
+export function formatQuotaChip(registry = null, { now = Date.now(), file = QUOTA_FILE } = {}) {
+  let data = registry;
+  if (!data) {
+    try { data = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { data = null; }
+  }
+  const e = data?.engines;
+  if (!e) return '[quota: no data]';
+  const parts = [chipCodex(e.codex, now, data), chipAntigravity(e.antigravity, now), chipMuse(e.muse)];
+  const age = chipAge(data, now);
+  if (age) parts.push(age);
+  return `[${parts.join(' | ')}]`;
+}
+
 // CLI olarak do\u011frudan \u00e7a\u011fr\u0131l\u0131rsa
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
   const force = process.argv.includes('--refresh') || process.argv.includes('-r');
   const asJson = process.argv.includes('--json');
+  const asChip = process.argv.includes('--chip');
 
   fetchAllQuotas({ force })
     .then(data => {
       if (asJson) {
         console.log(JSON.stringify(data, null, 2));
+      } else if (asChip) {
+        console.log(formatQuotaChip(data));
       } else {
         console.log('\n' + formatQuotaTable(data) + '\n');
       }
