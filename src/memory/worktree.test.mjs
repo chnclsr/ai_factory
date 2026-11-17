@@ -48,6 +48,27 @@ test('worktree name and git ref validation', () => {
   assert.equal(isValidGitRef('main^'), true);
   assert.equal(isValidGitRef('ref:colon'), false);
   assert.equal(isValidGitRef('ref.lock'), false);
+  assert.equal(isValidGitRef(' HEAD'), false);
+  assert.equal(isValidGitRef('main '), false);
+  assert.equal(isValidGitRef('main\n'), false);
+  assert.equal(isValidGitRef('\tmain'), false);
+});
+
+test('parseWorktreeList reports a locked worktree without a reason as truthy', () => {
+  const records = parseWorktreeList([
+    'worktree /path/to/wt',
+    'HEAD abcdef1234567890',
+    'branch refs/heads/ai-factory/wt',
+    'locked',
+    '',
+    'worktree /path/to/free',
+    'HEAD fedcba0987654321',
+    'branch refs/heads/free',
+    ''
+  ].join('\n'));
+  assert.ok(records[0].locked);
+  assert.equal(records[0].locked, 'locked');
+  assert.equal(records[1].locked, '');
 });
 
 test('parseWorktreeList parses porcelain output into records', () => {

@@ -47,9 +47,19 @@ function parseArgs(argv) {
   const flags = {};
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg === '--yes' || arg === '-y' || arg === '--global' || arg === '--all' || arg === '--force') flags[arg.replace(/^-+/, '')] = true;
-    else if (arg.startsWith('--')) flags[arg.slice(2)] = argv[++i] ?? '';
-    else positional.push(arg);
+    if (arg === '--yes' || arg === '-y' || arg === '--global' || arg === '--all' || arg === '--force' || arg === '--keep-branch') {
+      flags[arg.replace(/^-+/, '')] = true;
+    } else if (arg.startsWith('--')) {
+      const next = argv[i + 1];
+      if (next !== undefined && !next.startsWith('--')) {
+        flags[arg.slice(2)] = next;
+        i++;
+      } else {
+        flags[arg.slice(2)] = '';
+      }
+    } else {
+      positional.push(arg);
+    }
   }
   return { positional, flags };
 }
@@ -230,7 +240,12 @@ export async function runMemoryCli(argv, { repoDir, indexFile = null, configFile
       if (!task) { io.err('Nothing to hand off: pass --task or run a session first.\n'); return 1; }
       const parentRun = flags.run || flags['parent-run'] || '';
       const taskId = flags['task-id'] || flags.taskid || '';
-      const dependsOn = flags['depends-on'] || flags.dependson || '';
+      const rawDepends = flags['depends-on'] !== undefined ? flags['depends-on'] : flags.dependson;
+      if (rawDepends !== undefined && (typeof rawDepends !== 'string' || !rawDepends.trim())) {
+        io.err('Usage: --depends-on needs a value: a task id or a comma-separated list of task ids.\n');
+        return 1;
+      }
+      const dependsOn = rawDepends || '';
       const approval = flags.gate || flags.approval || '';
       try {
         const hid = beginHandoff(repoDir, project.key, {

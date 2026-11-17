@@ -459,3 +459,17 @@ test('CLI handoff begin and summary support orchestration flags and broad overvi
   assert.match(runSumRes.stdout, /Blocked/);
 });
 
+test('CLI handoff begin rejects --depends-on without a value', t => {
+  const h = makeHarness(t);
+  const cwd = workDir(h, 'orch-depends-empty');
+  const bare = h.run(['memory', 'handoff', 'begin', '--to', 'any', '--task', 'Child', '--cwd', cwd, '--depends-on']);
+  assert.equal(bare.status, 1);
+  assert.match(bare.stderr, /--depends-on needs a value/);
+  const empty = h.run(['memory', 'handoff', 'begin', '--to', 'any', '--task', 'Child', '--depends-on', '', '--cwd', cwd]);
+  assert.equal(empty.status, 1);
+  assert.match(empty.stderr, /--depends-on needs a value/);
+  const alias = h.run(['memory', 'handoff', 'begin', '--to', 'any', '--task', 'Child', '--dependson', '--cwd', cwd]);
+  assert.equal(alias.status, 1);
+  assert.match(alias.stderr, /--depends-on needs a value/);
+});
+

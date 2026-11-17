@@ -219,6 +219,7 @@ export function isValidWorktreeName(name) {
 export function isValidGitRef(ref) {
   if (typeof ref !== 'string' || !ref.trim()) return false;
   const trimmed = ref.trim();
+  if (ref !== trimmed) return false;
   if (trimmed.startsWith('-') || trimmed.startsWith('/') || trimmed.endsWith('/') || trimmed.endsWith('.')) return false;
   if (trimmed.includes('..') || trimmed.includes('@{') || trimmed.includes('\\')) return false;
   if (/[\x00-\x1F\x7F :?*[]/.test(trimmed)) return false;
@@ -294,7 +295,7 @@ export function parseWorktreeList(text) {
     else if (key === 'branch') current.branch = value.replace(/^refs\/heads\//, '');
     else if (key === 'bare') current.bare = true;
     else if (key === 'detached') current.detached = true;
-    else if (key === 'locked') current.locked = value;
+    else if (key === 'locked') current.locked = value || 'locked';
     else if (key === 'prunable') current.prunable = value;
   }
   if (current) out.push(current);
