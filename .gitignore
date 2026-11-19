@@ -27,7 +27,7 @@ coverage/
 Thumbs.db
 
 # A separate project that lives next to this one on the author's machine
-agy-puter-watchdog/
+agy-watchdog/
 
 # Development plans: working notes, not part of the repository (matches any docs/*plan*.md)
 docs/*plan*.md
